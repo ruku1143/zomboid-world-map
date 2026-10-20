@@ -1,0 +1,23 @@
+[Unit]
+Description=Zomboid live world map
+After=network.target
+
+[Service]
+User=zmap
+Group=zmap
+SupplementaryGroups=zomboid
+EnvironmentFile=/etc/zmap.env
+WorkingDirectory=/opt/zmap
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+CacheDirectory=zmap
+MemoryMax=150M
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/var/cache/zmap
+
+[Install]
+WantedBy=multi-user.target

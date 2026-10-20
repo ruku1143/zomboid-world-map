@@ -1,0 +1,3 @@
+name=ZMapPositions
+id=ZMapPositions
+description=Writes online player positions to Lua/zmap_players.json for the live world map. Server side only, read-only.
