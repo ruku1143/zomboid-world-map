@@ -7,7 +7,7 @@ User=zmap
 Group=zmap
 SupplementaryGroups=zomboid
 EnvironmentFile=/etc/zmap.env
-WorkingDirectory=/opt/zmap
+WorkingDirectory=/srv/zomboid-map
 ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=5
@@ -15,7 +15,7 @@ CacheDirectory=zmap
 MemoryMax=150M
 NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=read-only
+ProtectHome=true
 PrivateTmp=true
 ReadWritePaths=/var/cache/zmap
 

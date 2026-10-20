@@ -37,7 +37,7 @@ Install: copy `mod/ZMapPositions` into `~zomboid/Zomboid/mods/` and add `ZMapPos
 ## 4. Linux compatibility
 
 - Upstream has no hard Windows-only blocker in the position path, but it auto-detects only `~/Zomboid`, `/opt/pz-server` and similar, not `/srv/zomboid-server`.
-- We take both paths from config: `PZ_INSTALL_PATH=/srv/zomboid-server` and `PZ_DATA_PATH=/home/zomboid/Zomboid`. Nothing is auto-detected, nothing is Windows specific.
+- We take both paths from config: `PZ_INSTALL_PATH=/srv/zomboid-server` and `PZ_DATA_PATH=/srv/zomboid-server/Zomboid`. Nothing is auto-detected, nothing is Windows specific.
 - The mod writes via PZ's `getFileWriter`, which targets `<Zomboid>/Lua/`. That is the `zomboid` user's home, readable by group `zomboid`, so the `zmap` service user is added to that group.
 
 ## 5. Other findings
