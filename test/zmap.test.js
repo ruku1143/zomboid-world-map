@@ -212,6 +212,7 @@ test("resolveMap reads descriptors for the running version; tiles 404 stay empty
     assert.equal(ok.status, 200);
     assert.equal(await ok.text(), "JPEGDATA");
     assert.equal((await fetch(`${base}/tiles/15/3_2.jpg`)).headers.get("x-tile-cache"), "hit");
+    assert.equal((await fetch(`${base}/tiles/15/3_2.jpg?v=42.21.0-2048-1`)).status, 200, "the cache-busting query is ignored");
 
     const before = hits.length;
     assert.equal((await fetch(`${base}/tiles/15/9_9.jpg`)).status, 404);

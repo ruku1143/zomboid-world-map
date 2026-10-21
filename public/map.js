@@ -22,6 +22,8 @@ const queue = [];
 let loading = 0;
 
 const tileKey = (l, c, r) => `${l}/${c}_${r}`;
+// Tile URLs carry the map build so the browser (and any CDN) never reuses a tile cached for another one.
+let tileVersion = "0";
 
 // Decoded 2048px tiles are ~16 MB each, so keep only the most recently drawn ones.
 const MAX_READY = 80;
@@ -52,7 +54,7 @@ function requestTile(l, c, r) {
 
 async function loadTile(key) {
   try {
-    const res = await fetch(`tiles/${key}.jpg`);
+    const res = await fetch(`tiles/${key}.jpg?v=${tileVersion}`);
     if (res.status === 404) return tiles.set(key, "empty");
     if (!res.ok) throw new Error(String(res.status));
     tiles.set(key, await createImageBitmap(await res.blob()));
@@ -302,6 +304,7 @@ $("bannerClose").addEventListener("click", () => {
 async function init() {
   meta = await (await fetch("api/meta")).json();
   minScale = scaleForZoom(MIN_ZOOM, meta.map);
+  tileVersion = encodeURIComponent(`${meta.map.dir}-${meta.map.tileSize}-${meta.build.buildId ?? ""}`);
   document.title = `${meta.serverName} Map`;
   $("title").textContent = meta.serverName;
   if (meta.build.supported === false) banner(`Game version ${meta.build.version} is not Build 42. The map shown may not match this world.`);
