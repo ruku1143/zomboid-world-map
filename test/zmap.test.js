@@ -53,10 +53,10 @@ test("level and zoom helpers", () => {
 
 test("parseView reads shareable URL params", () => {
   const m = MAP_FALLBACK;
-  assert.deepEqual(parseView("?x=10000&y=9000&zoom=12", m), { x: 10000, y: 9000, zoom: 12 });
+  assert.deepEqual(parseView("?x=10000&y=9000&zoom=13", m), { x: 10000, y: 9000, zoom: 13 });
   assert.equal(parseView("?zoom=3", m), null);
-  assert.equal(MIN_ZOOM, 12);
-  assert.equal(parseView("?x=1&y=2&zoom=3", m).zoom, MIN_ZOOM, "zooming out past 12 is clamped");
+  assert.equal(MIN_ZOOM, 12.1);
+  assert.equal(parseView("?x=1&y=2&zoom=3", m).zoom, MIN_ZOOM, "zooming out past 12.1 is clamped");
   assert.equal(parseView("?x=1&y=2&zoom=99", m).zoom, m.maxLevel);
 });
 
@@ -95,6 +95,8 @@ test("readBuildInfo parses manifest and console version; B42 is supported", () =
   assert.deepEqual(readBuildInfo(cfg), { buildId: "25485538", branch: null, version: "42.21.0", supported: true });
   fs.writeFileSync(path.join(dataPath, "server-console.txt"), "version=41.78.16");
   assert.equal(readBuildInfo(cfg).supported, false);
+  fs.writeFileSync(path.join(dataPath, "server-console.txt"), "-----\nlog started\nversion=42.21.0 4a0e9546ec demo=false\n");
+  assert.equal(readBuildInfo(cfg).version, "42.21.0", "version need not be on the first line");
 });
 
 test("mapCandidates: override, running version, fallback, no duplicates", () => {

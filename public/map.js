@@ -263,10 +263,12 @@ async function poll() {
   setTimeout(poll, meta.refreshSeconds * 1000);
 }
 
-function banner(text) {
-  $("banner").textContent = text;
+function banner(text, level = "warn") {
+  $("bannerText").textContent = text;
+  $("banner").className = level;
   $("banner").hidden = !text;
 }
+$("bannerClose").addEventListener("click", () => { $("banner").hidden = true; });
 
 // ---- boot -----------------------------------------------------------------
 async function init() {
@@ -275,7 +277,7 @@ async function init() {
   document.title = `${meta.serverName} Map`;
   $("title").textContent = meta.serverName;
   if (meta.build.supported === false) banner(`Game version ${meta.build.version} is not Build 42. The map shown may not match this world.`);
-  else if (meta.mapSource === "fallback") banner(`Using the ${meta.map.dir} map layout (${meta.mapNote}). Positions may be slightly offset.`);
+  else if (meta.mapSource === "fallback") banner(`Map layout taken from ${meta.map.dir}: the tile host blocked this server's lookup for the running version (${meta.mapNote}). Markers may be slightly off.`, "info");
   const view = parseView(location.search, meta.map);
   if (view) {
     const d = gameToDzi(view.x, view.y, meta.map);

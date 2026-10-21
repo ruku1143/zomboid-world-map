@@ -106,10 +106,11 @@ export function readBuildInfo(cfg) {
   } catch {}
   try {
     const fd = fs.openSync(path.join(cfg.dataPath, "server-console.txt"), "r");
-    const buf = Buffer.alloc(512);
-    fs.readSync(fd, buf, 0, 512, 0);
+    const buf = Buffer.alloc(8192);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
     fs.closeSync(fd);
-    version = (buf.toString("utf8").split(/\r?\n/)[0].match(/version=(\d+\.\d+(?:\.\d+)?)/) || [])[1] || null;
+    // Usually on the first line, but do not depend on it: take the first match near the top.
+    version = (buf.toString("utf8", 0, n).match(/\bversion=(\d+\.\d+(?:\.\d+)?)/) || [])[1] || null;
   } catch {}
   const supported = version === null ? null : version.startsWith("42.");
   return { buildId, branch, version, supported };

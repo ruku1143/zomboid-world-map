@@ -16,7 +16,11 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
 #players small { color: var(--muted); }
 #empty { color: var(--muted); margin: 8px 0; }
 #empty[hidden] { display: none; }
-#banner { position: fixed; top: 52px; left: 16px; right: 290px; max-width: 520px; background: var(--warn); color: #fff; padding: 8px 12px; border-radius: 6px; }
+#banner { position: fixed; top: 52px; left: 16px; right: 290px; max-width: 520px; display: flex; gap: 12px; align-items: flex-start; background: var(--warn); color: #fff; padding: 8px 12px; border-radius: 6px; }
+#banner[hidden] { display: none; }
+#banner.info { background: #3a3220; color: #f3e3b3; border: 1px solid #6b5a2a; font-size: 13px; }
+#banner span { flex: 1; }
+#banner button { padding: 0 8px; font-size: 18px; line-height: 1.2; border: 0; color: inherit; }
 #coords { position: fixed; left: 0; bottom: 0; padding: 4px 12px; padding-bottom: max(4px, env(safe-area-inset-bottom)); background: var(--panel); color: var(--muted); font-variant-numeric: tabular-nums; border-radius: 0 8px 0 0; }
 @media (max-width: 600px) {
   #panel { width: 100%; top: auto; bottom: 0; max-height: 40%; border-radius: 8px 8px 0 0; }

@@ -12,7 +12,7 @@ export function dziToGame(dx, dy, m) {
 }
 
 // Zooming out further than this shows incomplete, blocky tiles on the coarse levels of the tile host.
-export const MIN_ZOOM = 12;
+export const MIN_ZOOM = 12.1;
 
 // URL "zoom" is the Deep Zoom level whose resolution matches the view:
 // canvas px per dzi px = 2^(zoom - maxLevel).
