@@ -23,16 +23,16 @@ The commands below assume the PZ server is installed in `/srv/zomboid-server`, r
    sudo chmod -R g+rwX /srv/zomboid-map
    sudo find /srv/zomboid-map -type d -exec chmod g+s {} +
    ```
-2. Install the mod (as `zomboid` with umask 0002, so group permissions stay intact):
+2. Install the script. It is not on the Steam Workshop, so do **not** list it in `Mods=`: the server would then require every client to have the mod and they get `Mod "ZMapPositions" is not installed`. Load it as a loose server file instead (as `zomboid`, with umask 0002):
    ```
-   sudo -u zomboid bash -c 'umask 0002; mkdir -p /srv/zomboid-server/Zomboid/mods && cp -r /srv/zomboid-map/mod/ZMapPositions /srv/zomboid-server/Zomboid/mods/'
+   sudo -u zomboid bash -c 'umask 0002; mkdir -p /srv/zomboid-server/media/lua/server && cp /srv/zomboid-map/mod/ZMapPositions/42/media/lua/server/ZMapPositions.lua /srv/zomboid-server/media/lua/server/'
    ```
-   The mod uses the Build 42 layout (`42/mod.info`, `42/media/...`, an empty `common/`). A Build 41-style folder is reported by PZ as `required mod "ZMapPositions" not found`.
-
-   Back up the config, then add `ZMapPositions` to `Mods=` (semicolon separated) in `/srv/zomboid-server/Zomboid/Server/pzserver.ini`:
+   Back up the config, then in `/srv/zomboid-server/Zomboid/Server/pzserver.ini` make sure `ZMapPositions` is **not** in `Mods=` and set `DoLuaChecksum=false` (the server's Lua checksum check would otherwise reject the extra file; this loosens that check slightly):
    ```
    cp /srv/zomboid-server/Zomboid/Server/pzserver.ini /srv/zomboid-server/Zomboid/Server/pzserver.ini.bak.$(date +%F-%H%M)
    ```
+   A game update can overwrite `media/lua/server/`: re-copy the file if the map goes quiet after one.
+
 3. Config: `sudo cp /srv/zomboid-map/deploy/zmap.env.example /etc/zmap.env`, edit `SERVER_NAME`, then `sudo chown root:zmap /etc/zmap.env && sudo chmod 640 /etc/zmap.env`. The default paths already match this layout.
 4. Run the map service:
    ```
@@ -45,12 +45,12 @@ The commands below assume the PZ server is installed in `/srv/zomboid-server`, r
 
 The `zmap` service sandbox (`ProtectSystem=strict`) can only write to `/var/cache/zmap`, even though its user is in the `zomboid` group, so it cannot modify the game server.
 
-**Fallback if clients complain about the mod:** copy `mod/ZMapPositions/42/media/lua/server/ZMapPositions.lua` to `/srv/zomboid-server/media/lua/server/`, remove the `Mods=` entry, set `DoLuaChecksum=false` in `pzserver.ini`, and restart. Note this loosens the server's Lua checksum check.
+**Publishing to the Workshop instead:** `mod/ZMapPositions` is already in the Build 42 mod layout. Once uploaded, add its Workshop ID to `WorkshopItems=` and `ZMapPositions` to `Mods=`; clients then download it automatically on connect, and `DoLuaChecksum` can stay `true`.
 
 ## Troubleshooting
 | Page says | Meaning | Check |
 |---|---|---|
-| "Positions file not found. Is the ZMapPositions mod loaded?" | `Lua/zmap_players.txt` does not exist | `journalctl -u zomboid \| grep -i zmap`: expect `[ZMapPositions] loaded`. `required mod ... not found` means a wrong folder layout (needs `42/` and `common/`), or the mod was copied after the last restart |
+| "Positions file not found. Is the ZMapPositions mod loaded?" | `Lua/zmap_players.txt` does not exist | `journalctl -u zomboid \| grep -i zmap`: expect `[ZMapPositions] loaded`. check that the script is in `<install>/media/lua/server/` and the server was restarted after copying it |
 | "No update for Ns. The server may be stopped." | The file exists but stopped refreshing | Is `zomboid` running? Look for `[ZMapPositions] write failed:` in the journal |
 | "Nobody is online." | All good, the mod is writing an empty list | |
 | Yellow/red banner about the map | Descriptors for your game version could not be fetched, so the 42.20.0 layout is used and markers may be slightly off | `curl -sI https://tiles.pzmap.org/<version>/base/layer0.dzi`; set `MAP_DIR` in `/etc/zmap.env` to force a build directory |
