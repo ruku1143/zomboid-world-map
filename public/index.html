@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zomboid Live Map</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="map" aria-label="Project Zomboid world map"></canvas>
+<header id="bar">
+  <strong id="title">Zomboid Live Map</strong>
+  <span id="status" role="status"></span>
+  <button id="toggle" type="button" aria-expanded="true">Players</button>
+</header>
+<aside id="panel">
+  <ul id="players"></ul>
+  <p id="empty">Nobody is online.</p>
+</aside>
+<div id="banner" hidden><span id="bannerText"></span><button id="bannerClose" type="button" aria-label="Dismiss">×</button></div>
+<div id="coords">—</div>
+<script type="module" src="map.js"></script>
+</body>
+</html>

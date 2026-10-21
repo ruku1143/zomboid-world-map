@@ -1,0 +1,29 @@
+:root {
+  --bg: #12151a; --panel: #1b2027ee; --text: #e6e9ee; --muted: #9aa4b2; --accent: #f2b134; --warn: #e5534b;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
+#map { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+#map.drag { cursor: grabbing; }
+#bar { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: 12px; align-items: center; padding: 8px 16px; padding-top: max(8px, env(safe-area-inset-top)); background: var(--panel); }
+#status { color: var(--muted); flex: 1; font-size: 13px; }
+button { background: transparent; color: var(--text); border: 1px solid var(--muted); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
+#panel { position: fixed; top: 48px; right: 0; width: 260px; max-height: calc(100% - 100px); overflow: auto; background: var(--panel); padding: 8px 16px; border-radius: 0 0 0 8px; }
+#panel.hidden { display: none; }
+#players { list-style: none; margin: 0; padding: 0; }
+#players li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; cursor: pointer; border-bottom: 1px solid #ffffff14; }
+#players small { color: var(--muted); }
+#empty { color: var(--muted); margin: 8px 0; }
+#empty[hidden] { display: none; }
+#banner { position: fixed; top: 52px; left: 16px; right: 290px; max-width: 520px; display: flex; gap: 12px; align-items: flex-start; background: var(--warn); color: #fff; padding: 8px 12px; border-radius: 6px; }
+#banner[hidden] { display: none; }
+#banner.info { background: #3a3220; color: #f3e3b3; border: 1px solid #6b5a2a; font-size: 13px; }
+#banner span { flex: 1; }
+#banner button { padding: 0 8px; font-size: 18px; line-height: 1.2; border: 0; color: inherit; }
+#coords { position: fixed; left: 0; bottom: 0; padding: 4px 12px; padding-bottom: max(4px, env(safe-area-inset-bottom)); background: var(--panel); color: var(--muted); font-variant-numeric: tabular-nums; border-radius: 0 8px 0 0; }
+@media (max-width: 600px) {
+  #panel { width: 100%; top: auto; bottom: 0; max-height: 40%; border-radius: 8px 8px 0 0; }
+  #banner { right: 16px; }
+  #coords { bottom: auto; top: 48px; border-radius: 0 0 8px 0; }
+}
