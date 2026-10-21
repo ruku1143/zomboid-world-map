@@ -57,6 +57,29 @@ The `zmap` service sandbox (`ProtectSystem=strict`) can only write to `/var/cach
 
 Tiles that the host has not rendered (the large black areas around the island) are expected: the map shows nothing there.
 
+## Uninstall
+Same example paths as the install. Adjust to your setup.
+
+1. Remove the map service:
+   ```
+   sudo systemctl disable --now zmap
+   sudo rm /etc/systemd/system/zmap.service /etc/zmap.env
+   sudo systemctl daemon-reload
+   sudo rm -rf /srv/zomboid-map /var/cache/zmap
+   sudo userdel zmap
+   ```
+   If you exposed it with `cloudflared` or a reverse proxy, remove that tunnel/route and any Cloudflare Access policy too (see [deploy/cloudflared.md](deploy/cloudflared.md)).
+2. Clean up the game server (check nobody is online first):
+   ```
+   sudo systemctl stop zomboid
+   sudo rm -f /srv/zomboid-server/media/lua/server/ZMapPositions.lua
+   sudo rm -rf /srv/zomboid-server/Zomboid/mods/ZMapPositions
+   sudo rm -f /srv/zomboid-server/Zomboid/Lua/zmap_players.txt
+   ```
+   In `/srv/zomboid-server/Zomboid/Server/pzserver.ini`: remove `ZMapPositions` from `Mods=` if it is there, and set `DoLuaChecksum=true` again (the default) unless you disabled it for another reason. Then `sudo systemctl start zomboid`.
+3. Optional: delete the `pzserver.ini.bak.*` backups.
+4. Check: `journalctl -u zomboid | grep -i zmap` shows nothing new after the restart, and clients connect with no mod prompts.
+
 ## Update
 `cd /srv/zomboid-map && sudo git pull && sudo systemctl restart zmap`
 
