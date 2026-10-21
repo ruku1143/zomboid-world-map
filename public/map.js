@@ -1,4 +1,4 @@
-import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, parseView, MIN_ZOOM } from "./projection.js";
+import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, parseView, MIN_ZOOM } from "./projection.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("map");
@@ -76,7 +76,12 @@ function pump() {
 function drawTile(l, c, r, x, y, size) {
   const t = tiles.get(tileKey(l, c, r));
   if (t === "empty") return;
-  if (isReady(t)) { touch(tileKey(l, c, r)); ctx.drawImage(t, x, y, size + 1, size + 1); return; }
+  if (isReady(t)) {
+    touch(tileKey(l, c, r));
+    const d = exactTileRect(t.width, t.height, size, meta.map);
+    ctx.drawImage(t, x, y, d.w + 1, d.h + 1);
+    return;
+  }
   for (let up = 1, pc = c, pr = r; up <= MAX_FALLBACK && l - up >= 0; up++) {
     pc >>= 1; pr >>= 1;
     const pl = l - up;
@@ -84,9 +89,8 @@ function drawTile(l, c, r, x, y, size) {
     if (parent === "empty") return;
     if (isReady(parent)) {
       touch(tileKey(pl, pc, pr));
-      const n = 2 ** up;
-      const sw = parent.width / n, sh = parent.height / n;
-      ctx.drawImage(parent, (c - pc * n) * sw, (r - pr * n) * sh, sw, sh, x, y, size + 1, size + 1);
+      const k = parentCrop(c, r, up, parent.width, parent.height, meta.map);
+      if (k) ctx.drawImage(parent, k.sx, k.sy, k.sw, k.sh, x, y, size * k.fw + 1, size * k.fh + 1);
       return;
     }
     requestTile(pl, pc, pr);
@@ -268,7 +272,15 @@ function banner(text, level = "warn") {
   $("banner").className = level;
   $("banner").hidden = !text;
 }
-$("bannerClose").addEventListener("click", () => { $("banner").hidden = true; });
+// A dismissed info banner stays dismissed for this browser; it only returns if the map directory changes.
+const dismissKey = () => `zmap-banner-${meta?.map?.dir}`;
+function bannerDismissed() {
+  try { return localStorage.getItem(dismissKey()) === "1"; } catch { return false; }
+}
+$("bannerClose").addEventListener("click", () => {
+  $("banner").hidden = true;
+  try { localStorage.setItem(dismissKey(), "1"); } catch {}
+});
 
 // ---- boot -----------------------------------------------------------------
 async function init() {
@@ -277,7 +289,7 @@ async function init() {
   document.title = `${meta.serverName} Map`;
   $("title").textContent = meta.serverName;
   if (meta.build.supported === false) banner(`Game version ${meta.build.version} is not Build 42. The map shown may not match this world.`);
-  else if (meta.mapSource === "fallback") banner(`Map layout taken from ${meta.map.dir}: the tile host blocked this server's lookup for the running version (${meta.mapNote}). Markers may be slightly off.`, "info");
+  else if (meta.mapSource === "fallback" && !bannerDismissed()) banner(`Showing the ${meta.map.dir} map. The tile host did not answer for the running version (${meta.mapNote}), so the built-in ${meta.map.dir} layout is used. This is fine unless the game map changed in a newer build.`, "info");
   const view = parseView(location.search, meta.map);
   if (view) {
     const d = gameToDzi(view.x, view.y, meta.map);
