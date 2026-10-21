@@ -41,11 +41,11 @@ The commands below assume the PZ server is installed in `/srv/zomboid-server`, r
    sudo systemctl enable --now zmap
    ```
 5. Restart the PZ server once so it loads the mod. Check nobody is online first: `echo "players" > /srv/zomboid-server/zomboid.control` then `journalctl -u zomboid -n 20`. Then `sudo systemctl restart zomboid` (saves first).
-6. Check: `ls -l /srv/zomboid-server/Zomboid/Lua/zmap_players.json` and `curl -s http://127.0.0.1:8780/api/players`.
+6. Check: `ls -l /srv/zomboid-server/Zomboid/Lua/zmap_players.txt` and `curl -s http://127.0.0.1:8780/api/players`.
 
 The `zmap` service sandbox (`ProtectSystem=strict`) can only write to `/var/cache/zmap`, even though its user is in the `zomboid` group, so it cannot modify the game server.
 
-**Fallback if clients complain about the mod:** copy `mod/ZMapPositions/media/lua/server/ZMapPositions.lua` to `/srv/zomboid-server/media/lua/server/`, remove the `Mods=` entry, set `DoLuaChecksum=false` in `pzserver.ini`, and restart. Note this loosens the server's Lua checksum check.
+**Fallback if clients complain about the mod:** copy `mod/ZMapPositions/42/media/lua/server/ZMapPositions.lua` to `/srv/zomboid-server/media/lua/server/`, remove the `Mods=` entry, set `DoLuaChecksum=false` in `pzserver.ini`, and restart. Note this loosens the server's Lua checksum check.
 
 ## Troubleshooting
 | Page says | Meaning | Check |

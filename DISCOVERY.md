@@ -36,7 +36,7 @@ Install: copy `mod/ZMapPositions` into `<Zomboid>/mods/` and add `ZMapPositions`
 **Chosen: read the Steam `buildid` from the app manifest, and the game version from `server-console.txt`.**
 
 - `steamapps/appmanifest_380870.acf` holds `buildid` and `BetaKey` (upstream `updateChecker.js:168`).
-- `server-console.txt` first line holds `version=42.21.0` (upstream `updateChecker.js:135`).
+- `server-console.txt` holds `version=42.21.0` near the top (upstream reads only the first line, `updateChecker.js:135`; we scan the first 8 KB).
 - On a `buildid` change we clear the tile cache. If the version does not start with `42.` the app reports it in `/api/meta` and the UI shows a warning rather than silently showing the wrong map.
 
 ## 4. Linux compatibility
