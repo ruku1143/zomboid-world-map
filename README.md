@@ -1,11 +1,12 @@
 # Zomboid Live Map
 
-A small read-only web map showing connected players on a Project Zomboid **Build 41** dedicated server. Zero npm dependencies: one Node file, a vanilla JS canvas client and a tiny server-side Lua mod. Forked from [fpsacha/zomboid-control-panel](https://github.com/fpsacha/zomboid-control-panel), see [CHANGES.md](CHANGES.md) and [DISCOVERY.md](DISCOVERY.md).
+A small read-only web map showing connected players on a Project Zomboid **Build 42** dedicated server. Zero npm dependencies: one Node file, a vanilla JS canvas client and a tiny server-side Lua mod. Forked from [fpsacha/zomboid-control-panel](https://github.com/fpsacha/zomboid-control-panel), see [CHANGES.md](CHANGES.md) and [DISCOVERY.md](DISCOVERY.md).
 
-How it works: the mod writes online players to `<Zomboid data>/Lua/zmap_players.json` every 2 s; `server.js` serves that file, proxies and caches map tiles from `tiles.pzmap.org`, and serves the page.
+How it works: the mod writes online players to `<Zomboid data>/Lua/zmap_players.txt` every 2 s (Build 42 only lets mods write `.txt` files, so the JSON lives in a `.txt`); `server.js` serves that file, discovers the matching map build on `tiles.pzmap.org` from the running game version, proxies and caches the tiles, and serves the page.
 
 ## Requirements
 - Node.js 20 or newer (Ubuntu's apt Node is often older: use NodeSource or nvm).
+- `curl` (present on Ubuntu). Used to read the map descriptors, because Cloudflare in front of the tile host can challenge Node's TLS stack.
 - Outbound HTTPS to `tiles.pzmap.org` (tiles are cached on disk after the first view).
 - Optional: `cloudflared` for public access, see [deploy/cloudflared.md](deploy/cloudflared.md).
 
@@ -26,6 +27,8 @@ Paths assume the PZ server is in `/srv/zomboid-server` (user `zomboid`, data in 
    ```
    sudo -u zomboid bash -c 'umask 0002; mkdir -p /srv/zomboid-server/Zomboid/mods && cp -r /srv/zomboid-map/mod/ZMapPositions /srv/zomboid-server/Zomboid/mods/'
    ```
+   The mod uses the Build 42 layout (`42/mod.info`, `42/media/...`, an empty `common/`). A Build 41-style folder is reported by PZ as `required mod "ZMapPositions" not found`.
+
    Back up the config, then add `ZMapPositions` to `Mods=` (semicolon separated) in `/srv/zomboid-server/Zomboid/Server/pzserver.ini`:
    ```
    cp /srv/zomboid-server/Zomboid/Server/pzserver.ini /srv/zomboid-server/Zomboid/Server/pzserver.ini.bak.$(date +%F-%H%M)
@@ -43,6 +46,16 @@ Paths assume the PZ server is in `/srv/zomboid-server` (user `zomboid`, data in 
 The `zmap` service sandbox (`ProtectSystem=strict`) can only write to `/var/cache/zmap`, even though its user is in the `zomboid` group, so it cannot modify the game server.
 
 **Fallback if clients complain about the mod:** copy `mod/ZMapPositions/media/lua/server/ZMapPositions.lua` to `/srv/zomboid-server/media/lua/server/`, remove the `Mods=` entry, set `DoLuaChecksum=false` in `pzserver.ini`, and restart. Note this loosens the server's Lua checksum check.
+
+## Troubleshooting
+| Page says | Meaning | Check |
+|---|---|---|
+| "Positions file not found. Is the ZMapPositions mod loaded?" | `Lua/zmap_players.txt` does not exist | `journalctl -u zomboid \| grep -i zmap`: expect `[ZMapPositions] loaded`. `required mod ... not found` means a wrong folder layout (needs `42/` and `common/`), or the mod was copied after the last restart |
+| "No update for Ns. The server may be stopped." | The file exists but stopped refreshing | Is `zomboid` running? Look for `[ZMapPositions] write failed:` in the journal |
+| "Nobody is online." | All good, the mod is writing an empty list | |
+| Yellow/red banner about the map | Descriptors for your game version could not be fetched, so the 42.20.0 layout is used and markers may be slightly off | `curl -sI https://tiles.pzmap.org/<version>/base/layer0.dzi`; set `MAP_DIR` in `/etc/zmap.env` to force a build directory |
+
+Tiles that the host has not rendered (the large black areas around the island) are expected: the map shows nothing there.
 
 ## Update
 `cd /srv/zomboid-map && sudo git pull && sudo systemctl restart zmap`

@@ -12,10 +12,10 @@ Forked from `fpsacha/zomboid-control-panel` (MIT). The whole upstream tree is st
 - `package.json` and lockfile. There are no npm dependencies now.
 
 ## Reimplemented (small, from scratch, informed by upstream)
-- Tile proxy and disk cache (from `server/routes/mapProxy.js`, B41 path only).
+- Tile proxy and disk cache with runtime map discovery (from `server/routes/mapProxy.js`, B42 path: reads `map_info.json` and `layer0.dzi` for the running game version).
 - Build detection (from `server/services/updateChecker.js`).
-- Map client: vanilla JS canvas using upstream's Deep Zoom tile loading, coarse-tile fallback and B41 isometric projection (from `client/src/pages/WorldMap.tsx` and `worldMapTileFallback.ts`).
-- Position mod: a ~60 line write-only Lua mod replacing PanelBridge.
+- Map client: vanilla JS canvas using upstream's Deep Zoom tile loading, coarse-tile fallback and isometric projection (from `client/src/pages/WorldMap.tsx` and `worldMapTileFallback.ts`).
+- Position mod: a ~60 line write-only Lua mod in the Build 42 layout (`42/`, `common/`), writing a `.txt` file because B42 `getFileWriter` rejects `.json`, replacing PanelBridge.
 
 ## Not carried over on purpose
-Authentication (use Cloudflare Access in front of the tunnel), Build 42 support, multi-floor view, points of interest, vehicles, Socket.IO.
+Authentication (use Cloudflare Access in front of the tunnel), Build 41 support, multi-floor view, points of interest, vehicles, Socket.IO.

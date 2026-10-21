@@ -15,44 +15,77 @@ let dirty = true;
 const redraw = () => (dirty = true);
 
 // ---- tiles ----------------------------------------------------------------
-const tiles = new Map(); // key -> HTMLImageElement | "empty" | {retryAt}
+// States: ImageBitmap (ready), "empty" (host has nothing rendered there: 404, draw
+// nothing), {loading:true}, {retryAt} (network or server error, retried later).
+const tiles = new Map();
 const queue = [];
 let loading = 0;
 
-function tileKey(l, c, r) { return `${l}/${c}_${r}`; }
+const tileKey = (l, c, r) => `${l}/${c}_${r}`;
+
+// Decoded 2048px tiles are ~16 MB each, so keep only the most recently drawn ones.
+const MAX_READY = 80;
+const lru = new Map();
+function touch(key) {
+  lru.delete(key);
+  lru.set(key, true);
+  while (lru.size > MAX_READY) {
+    const oldest = lru.keys().next().value;
+    lru.delete(oldest);
+    tiles.get(oldest)?.close?.();
+    tiles.delete(oldest);
+  }
+}
+const isReady = (t) => typeof ImageBitmap !== "undefined" && t instanceof ImageBitmap;
 
 function requestTile(l, c, r) {
   const key = tileKey(l, c, r);
   const hit = tiles.get(key);
-  if (hit && !(hit.retryAt && hit.retryAt < Date.now())) return;
-  if (queue.includes(key)) return;
+  if (hit) {
+    if (hit === "empty" || isReady(hit) || hit.loading) return;
+    if (hit.retryAt && hit.retryAt > Date.now()) return;
+  }
   tiles.set(key, { loading: true });
   queue.push(key);
   pump();
+}
+
+async function loadTile(key) {
+  try {
+    const res = await fetch(`tiles/${key}.jpg`);
+    if (res.status === 404) return tiles.set(key, "empty");
+    if (!res.ok) throw new Error(String(res.status));
+    tiles.set(key, await createImageBitmap(await res.blob()));
+    touch(key);
+  } catch {
+    tiles.set(key, { retryAt: Date.now() + 10000 });
+    setTimeout(redraw, 10500);
+  }
 }
 
 function pump() {
   while (loading < MAX_LOADS && queue.length) {
     const key = queue.pop(); // newest first: what is on screen now wins
     loading++;
-    const img = new Image();
-    img.onload = () => { tiles.set(key, img); loading--; redraw(); pump(); };
-    img.onerror = () => { tiles.set(key, { retryAt: Date.now() + 10000 }); loading--; pump(); };
-    img.src = `tiles/${key}.jpg`;
+    loadTile(key).finally(() => { loading--; redraw(); pump(); });
   }
 }
 
+// Draws the exact tile, or a stand-in from a coarser level while it loads or after an
+// error. Nothing is drawn for an "empty" tile: the host has no map there.
 function drawTile(l, c, r, x, y, size) {
-  const img = tiles.get(tileKey(l, c, r));
-  if (img instanceof HTMLImageElement) { ctx.drawImage(img, x, y, size + 1, size + 1); return; }
-  // Coarser ancestor as a stand-in while the exact tile loads.
+  const t = tiles.get(tileKey(l, c, r));
+  if (t === "empty") return;
+  if (isReady(t)) { touch(tileKey(l, c, r)); ctx.drawImage(t, x, y, size + 1, size + 1); return; }
   for (let up = 1, pc = c, pr = r; up <= MAX_FALLBACK && l - up >= 0; up++) {
     pc >>= 1; pr >>= 1;
     const pl = l - up;
     const parent = tiles.get(tileKey(pl, pc, pr));
-    if (parent instanceof HTMLImageElement) {
+    if (parent === "empty") return;
+    if (isReady(parent)) {
+      touch(tileKey(pl, pc, pr));
       const n = 2 ** up;
-      const sw = parent.naturalWidth / n, sh = parent.naturalHeight / n;
+      const sw = parent.width / n, sh = parent.height / n;
       ctx.drawImage(parent, (c - pc * n) * sw, (r - pr * n) * sh, sw, sh, x, y, size + 1, size + 1);
       return;
     }
@@ -206,9 +239,14 @@ function renderPlayers(data) {
     return li;
   }));
   $("empty").hidden = players.length > 0;
-  $("empty").textContent = data.stale ? "No data from the server. It may be offline." : "Nobody is online.";
+  const note = data.reason === "no-file"
+    ? "Positions file not found. Is the ZMapPositions mod loaded?"
+    : data.reason === "stale"
+      ? `No update for ${data.ageSeconds}s. The server may be stopped.`
+      : "Nobody is online.";
+  $("empty").textContent = note;
   $("status").textContent = data.stale
-    ? "Server offline or no data"
+    ? note
     : `${players.length} online · updated ${ago(data.updatedAt)}`;
   redraw();
 }
@@ -235,7 +273,8 @@ async function init() {
   meta = await (await fetch("api/meta")).json();
   document.title = `${meta.serverName} Map`;
   $("title").textContent = meta.serverName;
-  if (meta.build.supported === false) banner(`Game version ${meta.build.version} is not Build 41. The map shown may not match this world.`);
+  if (meta.build.supported === false) banner(`Game version ${meta.build.version} is not Build 42. The map shown may not match this world.`);
+  else if (meta.mapSource === "fallback") banner(`Using the ${meta.map.dir} map layout (${meta.mapNote}). Positions may be slightly offset.`);
   const view = parseView(location.search, meta.map);
   if (view) {
     const d = gameToDzi(view.x, view.y, meta.map);

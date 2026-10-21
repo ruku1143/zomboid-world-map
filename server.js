@@ -1,4 +1,4 @@
-// Live Project Zomboid (Build 41) world map. Read-only, zero dependencies.
+// Live Project Zomboid (Build 42) world map. Read-only, zero dependencies.
 // Config comes from environment variables, see deploy/zmap.env.example.
 import http from "node:http";
 import fs from "node:fs";
@@ -8,22 +8,40 @@ import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TILES_ROOT = "https://tiles.pzmap.org";
-const B41_TILE_DIR = "41.78.16/base/layer0_files";
 const USER_AGENT = "zomboid-world-map/1.0 (+https://github.com/ruku1143/zomboid-world-map)";
 const MOD_INTERVAL_SECONDS = 2; // ZMapPositions.lua write interval
+const POSITIONS_FILES = ["zmap_players.txt", "zmap_players.json"]; // B42 only lets Lua write .txt
+const MAP_TTL_MS = 24 * 60 * 60 * 1000;
+const MAP_RETRY_MS = 60 * 1000;
+const NEGATIVE_TTL_MS = 60 * 60 * 1000;
+const NEGATIVE_MAX = 20000;
 
-// Build 41 geometry and isometric projection, from pzmap.org / upstream WorldMap.tsx.
-export const MAP_B41 = {
-  tileSize: 1024,
-  fullWidth: 2285184,
-  fullHeight: 990400,
-  maxLevel: 22,
-  renderedMaxLevel: 16,
-  isoX0: 1017856,
-  isoY0: -152000,
-  isoHalfSqr: 64,
-  isoQuarterSqr: 32,
-};
+// Geometry of the 42.20.0 render on tiles.pzmap.org (from its map_info.json and
+// layer0.dzi). Used only when the real descriptors cannot be fetched.
+export const MAP_FALLBACK = mapFromDescriptors(
+  "42.20.0",
+  { tileSize: 2048, width: 2318656, height: 1019040 },
+  { x0: 1040384, y0: -139296, sqr: 128, scale: 1 },
+);
+
+// Isometric projection: imageX = (x0 + (gx - gy) * sqr / 2) / scale
+//                       imageY = (y0 + (gx + gy) * sqr / 4) / scale
+export function mapFromDescriptors(dir, dzi, proj) {
+  const maxLevel = Math.ceil(Math.log2(Math.max(dzi.width, dzi.height)));
+  return {
+    dir,
+    format: "jpg",
+    tileSize: dzi.tileSize,
+    fullWidth: dzi.width,
+    fullHeight: dzi.height,
+    maxLevel,
+    renderedMaxLevel: maxLevel,
+    isoX0: proj.x0 / proj.scale,
+    isoY0: proj.y0 / proj.scale,
+    isoHalfSqr: proj.sqr / 2 / proj.scale,
+    isoQuarterSqr: proj.sqr / 4 / proj.scale,
+  };
+}
 
 export function loadConfig(env = process.env) {
   const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
@@ -37,21 +55,30 @@ export function loadConfig(env = process.env) {
     tileCacheDir: env.TILE_CACHE_DIR || path.join(HERE, "tile-cache"),
     tileCacheMaxBytes: num(env.TILE_CACHE_MAX_MB, 1024) * 1024 * 1024,
     tilesRoot: env.TILES_ROOT || TILES_ROOT,
+    mapDir: env.MAP_DIR || "", // optional: force a tiles.pzmap.org build directory
   };
 }
 
 // ---- positions ------------------------------------------------------------
 
 export function readPlayers(cfg, now = Date.now()) {
-  const file = path.join(cfg.dataPath, "Lua", "zmap_players.json");
-  let stat;
-  try {
-    stat = fs.statSync(file);
-  } catch {
-    return { available: false, stale: true, updatedAt: null, players: [] };
+  let file = null;
+  let stat = null;
+  for (const name of POSITIONS_FILES) {
+    try {
+      const candidate = path.join(cfg.dataPath, "Lua", name);
+      const s = fs.statSync(candidate);
+      if (!stat || s.mtimeMs > stat.mtimeMs) {
+        file = candidate;
+        stat = s;
+      }
+    } catch {}
   }
+  if (!file) return { available: false, stale: true, reason: "no-file", updatedAt: null, players: [] };
   const ageMs = now - stat.mtimeMs;
   const staleAfterMs = Math.max(cfg.refreshSeconds, MOD_INTERVAL_SECONDS) * 3000;
+  const stale = ageMs > staleAfterMs;
+  const base = { available: true, stale, reason: stale ? "stale" : null, ageSeconds: Math.round(ageMs / 1000), updatedAt: stat.mtimeMs };
   let players = [];
   try {
     const data = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -60,11 +87,10 @@ export function readPlayers(cfg, now = Date.now()) {
       .map((p) => ({ name: p.name, x: p.x, y: p.y, z: Number.isFinite(p.z) ? p.z : 0 }));
   } catch {
     // Mid-write read; the client keeps its last good state and retries.
-    return { available: true, stale: ageMs > staleAfterMs, updatedAt: stat.mtimeMs, players: [], error: "unreadable" };
+    return { ...base, players: [], error: "unreadable" };
   }
-  const stale = ageMs > staleAfterMs;
   // A stale file means the server (or mod) stopped: nobody is shown as online.
-  return { available: true, stale, updatedAt: stat.mtimeMs, players: stale ? [] : players };
+  return { ...base, players: stale ? [] : players };
 }
 
 // ---- build detection ------------------------------------------------------
@@ -85,7 +111,7 @@ export function readBuildInfo(cfg) {
     fs.closeSync(fd);
     version = (buf.toString("utf8").split(/\r?\n/)[0].match(/version=(\d+\.\d+(?:\.\d+)?)/) || [])[1] || null;
   } catch {}
-  const supported = version === null ? null : version.startsWith("41.");
+  const supported = version === null ? null : version.startsWith("42.");
   return { buildId, branch, version, supported };
 }
 
@@ -99,15 +125,103 @@ export function checkBuildChange(cfg, build) {
   } catch {}
   if (previous === build.buildId) return false;
   const purged = previous !== null;
+  fs.mkdirSync(cfg.tileCacheDir, { recursive: true });
   if (purged) {
     for (const entry of fs.readdirSync(cfg.tileCacheDir)) {
       if (entry !== "build.json") fs.rmSync(path.join(cfg.tileCacheDir, entry), { recursive: true, force: true });
     }
     tileIndex = null;
+    negative.clear();
+    mapState = null;
   }
-  fs.mkdirSync(cfg.tileCacheDir, { recursive: true });
   fs.writeFileSync(stateFile, JSON.stringify({ buildId: build.buildId }));
   return purged;
+}
+
+// ---- curl (Cloudflare challenges Node's TLS stack on descriptor paths) -----
+
+const CURL_MARKER = Buffer.from("\n__CURL_HTTP_STATUS__:");
+
+// Always an argument array, never a shell; `--` stops curl parsing the URL as a flag.
+function curlGet(url, timeoutS = 8) {
+  return new Promise((resolve, reject) => {
+    execFile(
+      "curl",
+      ["-s", "--max-time", String(timeoutS), "-A", USER_AGENT, "-w", `${CURL_MARKER.toString()}%{http_code}`, "--", url],
+      { encoding: "buffer", maxBuffer: 32 * 1024 * 1024, timeout: (timeoutS + 2) * 1000 },
+      (err, stdout) => {
+        if (err && !stdout?.length) return reject(err);
+        const idx = stdout.lastIndexOf(CURL_MARKER);
+        if (idx === -1) return reject(new Error("curl output missing status"));
+        const status = Number(stdout.subarray(idx + CURL_MARKER.length).toString().trim());
+        resolve({ status, body: stdout.subarray(0, idx) });
+      },
+    );
+  });
+}
+
+// ---- map discovery --------------------------------------------------------
+
+async function fetchDescriptors(cfg, dir) {
+  const base = `${cfg.tilesRoot}/${dir}/base`;
+  const [dziRes, infoRes] = await Promise.all([curlGet(`${base}/layer0.dzi`), curlGet(`${base}/map_info.json`)]);
+  if (dziRes.status !== 200 || infoRes.status !== 200) return null;
+  const xml = dziRes.body.toString("utf8");
+  const tileSize = Number(xml.match(/TileSize="(\d+)"/)?.[1]);
+  const width = Number(xml.match(/Width="(\d+)"/)?.[1]);
+  const height = Number(xml.match(/Height="(\d+)"/)?.[1]);
+  let info;
+  try {
+    info = JSON.parse(infoRes.body.toString("utf8"));
+  } catch {
+    return null;
+  }
+  const x0 = Number(info?.x0);
+  const y0 = Number(info?.y0);
+  const sqr = Number(info?.sqr);
+  const skip = Number(info?.skip);
+  if (!tileSize || !width || !height || !Number.isFinite(x0) || !Number.isFinite(y0) || !sqr) return null;
+  return mapFromDescriptors(dir, { tileSize, width, height }, { x0, y0, sqr, scale: 1 << (Number.isFinite(skip) ? skip : 0) });
+}
+
+// Candidate build directories, best first: explicit override, the running game
+// version (e.g. 42.21.0), then the known-good fallback.
+export function mapCandidates(cfg, build) {
+  return [...new Set([cfg.mapDir, build?.version, MAP_FALLBACK.dir].filter(Boolean))];
+}
+
+let mapState = null; // {map, source, reason, at}
+let mapInflight = null;
+
+// Tests only: forget the cached map resolution.
+export function _resetMapState() {
+  mapState = null;
+  mapInflight = null;
+}
+
+export async function resolveMap(cfg) {
+  const ttl = mapState?.source === "dynamic" ? MAP_TTL_MS : MAP_RETRY_MS;
+  if (mapState && Date.now() - mapState.at < ttl) return mapState;
+  if (!mapInflight) {
+    mapInflight = (async () => {
+      const build = readBuildInfo(cfg);
+      let reason = null;
+      for (const dir of mapCandidates(cfg, build)) {
+        try {
+          const map = await fetchDescriptors(cfg, dir);
+          if (map) return (mapState = { map, source: "dynamic", reason: null, at: Date.now() });
+          reason = `no map descriptors for ${dir}`;
+        } catch (e) {
+          reason = `descriptor request failed (${e.code === "ENOENT" ? "curl not installed" : e.message})`;
+          if (e.code === "ENOENT") break;
+        }
+      }
+      return (mapState = { map: MAP_FALLBACK, source: "fallback", reason, at: Date.now() });
+    })().finally(() => {
+      mapInflight = null;
+    });
+  }
+  return mapInflight;
 }
 
 // ---- tile proxy and disk cache -------------------------------------------
@@ -115,27 +229,37 @@ export function checkBuildChange(cfg, build) {
 let tileIndex = null; // Map relPath -> {size, mtime}, rebuilt lazily from disk
 let tileBytes = 0;
 const inflight = new Map();
+const negative = new Map(); // relPath -> expiry; upstream answered 404 = empty area
+
+const tilesDir = (cfg) => path.join(cfg.tileCacheDir, "tiles");
+
+function walkTiles(root, prefix, out) {
+  let entries = [];
+  try {
+    entries = fs.readdirSync(path.join(root, prefix), { withFileTypes: true });
+  } catch {}
+  for (const e of entries) {
+    const rel = prefix ? `${prefix}/${e.name}` : e.name;
+    if (e.isDirectory()) walkTiles(root, rel, out);
+    else out.push(rel);
+  }
+}
 
 function buildTileIndex(cfg) {
   tileIndex = new Map();
   tileBytes = 0;
-  const root = path.join(cfg.tileCacheDir, "b41");
-  let levels = [];
-  try {
-    levels = fs.readdirSync(root);
-  } catch {}
-  for (const level of levels) {
-    for (const file of fs.readdirSync(path.join(root, level))) {
-      const st = fs.statSync(path.join(root, level, file));
-      tileIndex.set(`${level}/${file}`, { size: st.size, mtime: st.mtimeMs });
-      tileBytes += st.size;
-    }
+  const files = [];
+  walkTiles(tilesDir(cfg), "", files);
+  for (const rel of files) {
+    const st = fs.statSync(path.join(tilesDir(cfg), rel));
+    tileIndex.set(rel, { size: st.size, mtime: st.mtimeMs });
+    tileBytes += st.size;
   }
 }
 
 export function cacheTile(cfg, rel, buf) {
   if (!tileIndex) buildTileIndex(cfg);
-  const file = path.join(cfg.tileCacheDir, "b41", rel);
+  const file = path.join(tilesDir(cfg), rel);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, buf);
   const prev = tileIndex.get(rel);
@@ -146,7 +270,7 @@ export function cacheTile(cfg, rel, buf) {
     const oldestFirst = [...tileIndex.entries()].sort((a, b) => a[1].mtime - b[1].mtime);
     for (const [key, meta] of oldestFirst) {
       if (tileBytes <= cfg.tileCacheMaxBytes || key === rel) break;
-      fs.rmSync(path.join(cfg.tileCacheDir, "b41", key), { force: true });
+      fs.rmSync(path.join(tilesDir(cfg), key), { force: true });
       tileIndex.delete(key);
       tileBytes -= meta.size;
     }
@@ -155,7 +279,7 @@ export function cacheTile(cfg, rel, buf) {
 
 export function readCachedTile(cfg, rel) {
   try {
-    const file = path.join(cfg.tileCacheDir, "b41", rel);
+    const file = path.join(tilesDir(cfg), rel);
     const buf = fs.readFileSync(file);
     const now = new Date();
     fs.utimes(file, now, now, () => {}); // LRU touch
@@ -166,19 +290,8 @@ export function readCachedTile(cfg, rel) {
   }
 }
 
-function curlFetch(url) {
-  return new Promise((resolve, reject) => {
-    execFile(
-      "curl",
-      ["-sS", "-f", "--max-time", "20", "-A", USER_AGENT, url],
-      { encoding: "buffer", maxBuffer: 16 * 1024 * 1024 },
-      (err, stdout) => (err ? reject(err) : resolve(stdout)),
-    );
-  });
-}
-
 // Node's fetch first; curl as a fallback because Cloudflare in front of the
-// tile host has been known to reject non-curl TLS fingerprints.
+// tile host can reject Node's TLS fingerprint.
 async function fetchUpstream(url) {
   try {
     const res = await fetch(url, { headers: { "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(20000) });
@@ -186,25 +299,37 @@ async function fetchUpstream(url) {
     if (res.ok) return { status: 200, body: Buffer.from(await res.arrayBuffer()) };
   } catch {}
   try {
-    return { status: 200, body: await curlFetch(url) };
-  } catch {
-    return { status: 502 };
-  }
+    const r = await curlGet(url, 20);
+    if (r.status === 200 || r.status === 404) return r;
+  } catch {}
+  return { status: 502 };
 }
 
-async function serveTile(cfg, level, tile, res) {
-  const rel = `${level}/${tile}`;
+async function serveTile(cfg, map, level, tile, res) {
+  const rel = `${map.dir}/${level}/${tile}`;
+  const expiry = negative.get(rel);
+  if (expiry && expiry > Date.now()) {
+    res.writeHead(404, { "X-Tile-Cache": "hit", "Cache-Control": "public, max-age=3600" });
+    return res.end();
+  }
   let body = readCachedTile(cfg, rel);
   let cache = "hit";
   if (!body) {
     cache = "miss";
     if (!inflight.has(rel)) {
-      const p = fetchUpstream(`${cfg.tilesRoot}/${B41_TILE_DIR}/${level}/${tile}`).finally(() => inflight.delete(rel));
+      const p = fetchUpstream(`${cfg.tilesRoot}/${map.dir}/base/layer0_files/${level}/${tile}`).finally(() => inflight.delete(rel));
       inflight.set(rel, p);
     }
     const r = await inflight.get(rel);
+    if (r.status === 404) {
+      // An area with nothing rendered: remember it so we do not ask the host again for a while.
+      if (negative.size >= NEGATIVE_MAX) negative.delete(negative.keys().next().value);
+      negative.set(rel, Date.now() + NEGATIVE_TTL_MS);
+      res.writeHead(404, { "X-Tile-Cache": cache, "Cache-Control": "public, max-age=3600" });
+      return res.end();
+    }
     if (r.status !== 200) {
-      res.writeHead(r.status, { "X-Tile-Cache": cache });
+      res.writeHead(502, { "X-Tile-Cache": cache });
       return res.end();
     }
     body = r.body;
@@ -241,13 +366,15 @@ export function createServer(cfg) {
     if (p === "/api/players") return json(res, 200, readPlayers(cfg));
     if (p === "/api/meta") {
       const build = readBuildInfo(cfg);
-      return json(res, 200, { serverName: cfg.serverName, refreshSeconds: cfg.refreshSeconds, build, map: MAP_B41 });
+      const { map, source, reason } = await resolveMap(cfg);
+      return json(res, 200, { serverName: cfg.serverName, refreshSeconds: cfg.refreshSeconds, build, map, mapSource: source, mapNote: reason });
     }
     const tm = p.match(/^\/tiles\/(\d{1,2})\/(\d{1,6}_\d{1,6})\.jpg$/);
     if (tm) {
+      const { map } = await resolveMap(cfg);
       const level = Number(tm[1]);
-      if (level > MAP_B41.maxLevel) return json(res, 400, { error: "invalid level" });
-      return serveTile(cfg, level, `${tm[2]}.jpg`, res);
+      if (level > map.maxLevel) return json(res, 400, { error: "invalid level" });
+      return serveTile(cfg, map, level, `${tm[2]}.jpg`, res);
     }
 
     // Static files, with traversal guard.
@@ -278,6 +405,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   };
   check();
   setInterval(check, 60_000).unref();
+  resolveMap(cfg).then((s) => console.log(`map: ${s.map.dir} (${s.source}${s.reason ? `: ${s.reason}` : ""})`));
   createServer(cfg).listen(cfg.port, cfg.bindAddr, () =>
     console.log(`zmap listening on http://${cfg.bindAddr}:${cfg.port}`),
   );

@@ -1,7 +1,7 @@
 {
   "name": "zomboid-world-map",
   "version": "1.0.0",
-  "description": "Read-only live world map for a Project Zomboid Build 41 dedicated server",
+  "description": "Read-only live world map for a Project Zomboid Build 42 dedicated server",
   "type": "module",
   "license": "MIT",
   "private": true,
