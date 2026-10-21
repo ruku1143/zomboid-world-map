@@ -318,7 +318,7 @@ export function readCachedTile(cfg, rel) {
 
 // Node's fetch first; curl as a fallback because Cloudflare in front of the
 // tile host can reject Node's TLS fingerprint.
-async function fetchUpstream(url) {
+export async function fetchUpstream(url) {
   try {
     const res = await fetch(url, { headers: { "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(20000) });
     if (res.status === 404) return { status: 404 };

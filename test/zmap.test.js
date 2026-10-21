@@ -8,7 +8,8 @@ import {
   MAP_FALLBACK, mapFromDescriptors, mapCandidates, loadConfig, readPlayers, readBuildInfo,
   checkBuildChange, cacheTile, readCachedTile, createServer, resolveMap, _resetMapState,
 } from "../server.js";
-import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, MIN_ZOOM } from "../public/projection.js";
+import { prefetch } from "../prefetch.js";
+import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, MIN_ZOOM } from "../public/projection.js";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "zmap-"));
 
@@ -32,6 +33,26 @@ test("projection round-trips and matches the 42.20.0 origin", () => {
   }
   assert.deepEqual(gameToDzi(0, 0, m), { x: 1040384, y: -139296 });
   assert.deepEqual(gameToDzi(1, 0, m), { x: 1040384 + 64, y: -139296 + 32 });
+});
+
+test("edge tiles cover only their real share of the cell", () => {
+  const m = MAP_FALLBACK;
+  // 42.20.0 level 12 tile 0_0 is 2048x996: a cell shown at 512px is 512 wide and ~249 tall, not 512 square.
+  const d = exactTileRect(2048, 996, 512, m);
+  assert.equal(d.w, 512);
+  assert.equal(d.h, 996 / 4);
+});
+
+test("stand-in crops use the nominal tile size, not the ancestor's bitmap size", () => {
+  const m = MAP_FALLBACK;
+  // Level 16 cell (6, 3) inside level 13 tile (0, 0), which is 2048x1991: 3 levels up, 8 cells per side.
+  const k = parentCrop(6, 3, 3, 2048, 1991, m);
+  assert.deepEqual([k.sx, k.sy, k.sw, k.sh, k.fw, k.fh], [6 * 256, 3 * 256, 256, 256, 1, 1]);
+  // Level 12 tile 0_0 is only 996 tall: cell row 7, 4 levels down, starts at y=896 and has 100px of image.
+  const e = parentCrop(6, 7, 4, 2048, 996, m);
+  assert.deepEqual([e.sy, e.sh, e.fh], [896, 100, 100 / 128]);
+  // Past the ancestor's real extent there is nothing to draw.
+  assert.equal(parentCrop(6, 8, 4, 2048, 996, m), null);
 });
 
 test("scale divides the projection (skip > 0)", () => {
@@ -139,6 +160,32 @@ function fakeTilesHost(hits) {
     }
   });
 }
+
+test("prefetch downloads every rendered cell once and skips cached ones", async () => {
+  _resetMapState();
+  const hits = [];
+  const host = http.createServer((req, res) => {
+    hits.push(req.url);
+    if (/^\/42\.20\.0\/base\/layer0_files\/1[0-2]\/0_0\.jpg$/.test(req.url)) res.end("JPEG");
+    else { res.statusCode = 404; res.end("nope"); }
+  });
+  const hostUrl = await listen(host);
+  const { cfg } = setup({ TILES_ROOT: hostUrl });
+  try {
+    const totals = await prefetch(cfg, 12, () => {});
+    assert.equal(totals.fetched, 3);
+    assert.equal(totals.failed, 0);
+    assert.ok(totals.empty >= 1);
+    assert.equal(readCachedTile(cfg, "42.20.0/12/0_0.jpg").toString(), "JPEG");
+    const before = hits.length;
+    const again = await prefetch(cfg, 12, () => {});
+    assert.equal(again.fetched, 0);
+    assert.equal(again.cached, 3);
+    assert.ok(hits.slice(before).every((u) => !/layer0_files\/1[0-2]\/0_0\.jpg$/.test(u)), "cached tiles are not requested again");
+  } finally {
+    host.close();
+  }
+});
 
 test("resolveMap reads descriptors for the running version; tiles 404 stay empty and are not re-requested", async () => {
   _resetMapState();

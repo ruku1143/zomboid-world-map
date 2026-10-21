@@ -27,6 +27,28 @@ export function levelForScale(scale, m) {
 // Size of one tile of `level` in full-resolution dzi pixels.
 export const tileSpan = (level, m) => m.tileSize * 2 ** (m.maxLevel - level);
 
+// Tiles on the right and bottom edge of a level are smaller than tileSize (standard Deep Zoom),
+// so a bitmap covers bitmapSize/tileSize of its grid cell. `size` is the cell's size on screen.
+export function exactTileRect(bw, bh, size, m) {
+  const k = size / m.tileSize;
+  return { w: bw * k, h: bh * k };
+}
+
+// Source rectangle of the cell (c, r) inside its `up`-levels-coarser ancestor, in the ancestor's
+// bitmap pixels. Uses the nominal tileSize, not the bitmap size: an edge ancestor is smaller than
+// tileSize and scaling by its real size would shift and stretch the stand-in. fw/fh are the
+// fractions of the cell the ancestor actually covers; null if it covers none of it.
+export function parentCrop(c, r, up, pw, ph, m) {
+  const n = 2 ** up;
+  const cell = m.tileSize / n;
+  const sx = (c % n) * cell;
+  const sy = (r % n) * cell;
+  const sw = Math.min(cell, pw - sx);
+  const sh = Math.min(cell, ph - sy);
+  if (sw <= 0 || sh <= 0) return null;
+  return { sx, sy, sw, sh, fw: sw / cell, fh: sh / cell };
+}
+
 export function parseView(search, m) {
   const q = new URLSearchParams(search);
   const x = parseFloat(q.get("x"));
