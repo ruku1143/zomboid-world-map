@@ -8,7 +8,7 @@ import {
   MAP_FALLBACK, mapFromDescriptors, mapCandidates, loadConfig, readPlayers, readBuildInfo,
   checkBuildChange, cacheTile, readCachedTile, createServer, resolveMap, _resetMapState,
 } from "../server.js";
-import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView } from "../public/projection.js";
+import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, MIN_ZOOM } from "../public/projection.js";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "zmap-"));
 
@@ -55,6 +55,8 @@ test("parseView reads shareable URL params", () => {
   const m = MAP_FALLBACK;
   assert.deepEqual(parseView("?x=10000&y=9000&zoom=12", m), { x: 10000, y: 9000, zoom: 12 });
   assert.equal(parseView("?zoom=3", m), null);
+  assert.equal(MIN_ZOOM, 12);
+  assert.equal(parseView("?x=1&y=2&zoom=3", m).zoom, MIN_ZOOM, "zooming out past 12 is clamped");
   assert.equal(parseView("?x=1&y=2&zoom=99", m).zoom, m.maxLevel);
 });
 

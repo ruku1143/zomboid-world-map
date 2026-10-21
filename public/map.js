@@ -1,9 +1,9 @@
-import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, parseView } from "./projection.js";
+import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, parseView, MIN_ZOOM } from "./projection.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("map");
 const ctx = canvas.getContext("2d");
-const MIN_SCALE = 0.0003;
+let minScale = 0.001; // set from MIN_ZOOM once the map geometry is known
 const MAX_SCALE = 1;
 const MAX_FALLBACK = 4;
 const MAX_LOADS = 8;
@@ -155,7 +155,7 @@ function loop() {
 // ---- interaction ----------------------------------------------------------
 function zoomAt(sx, sy, factor) {
   const before = toDzi(sx, sy);
-  cam.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, cam.scale * factor));
+  cam.scale = Math.min(MAX_SCALE, Math.max(minScale, cam.scale * factor));
   const after = toDzi(sx, sy);
   cam.x += before.x - after.x;
   cam.y += before.y - after.y;
@@ -271,6 +271,7 @@ function banner(text) {
 // ---- boot -----------------------------------------------------------------
 async function init() {
   meta = await (await fetch("api/meta")).json();
+  minScale = scaleForZoom(MIN_ZOOM, meta.map);
   document.title = `${meta.serverName} Map`;
   $("title").textContent = meta.serverName;
   if (meta.build.supported === false) banner(`Game version ${meta.build.version} is not Build 42. The map shown may not match this world.`);
@@ -283,7 +284,7 @@ async function init() {
     const d = gameToDzi(10800, 10000, meta.map); // Muldraugh area
     cam.x = d.x; cam.y = d.y; cam.scale = scaleForZoom(14, meta.map);
   }
-  cam.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, cam.scale));
+  cam.scale = Math.min(MAX_SCALE, Math.max(minScale, cam.scale));
   redraw();
   poll();
 }

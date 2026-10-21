@@ -162,10 +162,30 @@ function curlGet(url, timeoutS = 8) {
 
 // ---- map discovery --------------------------------------------------------
 
+// Descriptors: curl first, then Node's own fetch. Which one Cloudflare lets through
+// depends on the network the box is on, so try both before giving up.
+async function getDescriptor(url) {
+  let first = { status: 0 };
+  try {
+    first = await curlGet(url);
+    if (first.status === 200) return first;
+  } catch (e) {
+    first = { status: 0, error: e };
+  }
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(8000) });
+    if (res.ok) return { status: 200, body: Buffer.from(await res.arrayBuffer()) };
+    return { status: res.status, body: Buffer.alloc(0) };
+  } catch {
+    if (first.error) throw first.error;
+    return first;
+  }
+}
+
 // Returns {map} on success, or {why} naming the HTTP status of each descriptor.
 async function fetchDescriptors(cfg, dir) {
   const base = `${cfg.tilesRoot}/${dir}/base`;
-  const [dziRes, infoRes] = await Promise.all([curlGet(`${base}/layer0.dzi`), curlGet(`${base}/map_info.json`)]);
+  const [dziRes, infoRes] = await Promise.all([getDescriptor(`${base}/layer0.dzi`), getDescriptor(`${base}/map_info.json`)]);
   if (dziRes.status !== 200 || infoRes.status !== 200) {
     return { why: `${dir}: layer0.dzi HTTP ${dziRes.status}, map_info.json HTTP ${infoRes.status}` };
   }
@@ -388,7 +408,7 @@ export function createServer(cfg) {
     if (!file.startsWith(publicDir + path.sep) || !MIME[path.extname(file)]) return json(res, 404, { error: "not found" });
     fs.readFile(file, (err, data) => {
       if (err) return json(res, 404, { error: "not found" });
-      res.writeHead(200, { "Content-Type": MIME[path.extname(file)], "Cache-Control": "no-cache" });
+      res.writeHead(200, { "Content-Type": MIME[path.extname(file)], "Cache-Control": "no-store" });
       res.end(req.method === "HEAD" ? undefined : data);
     });
   });

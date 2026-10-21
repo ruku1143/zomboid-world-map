@@ -65,7 +65,7 @@ All via environment variables in `/etc/zmap.env`, see [deploy/zmap.env.example](
 
 ## Using the map
 - Drag to pan, wheel or pinch to zoom, tap a player in the list to centre on them. The bottom corner shows the world coordinate under the cursor.
-- Share a view: `/?x=10800&y=10000&zoom=14` (`zoom` is the Deep Zoom level, 8 to 22).
+- Share a view: `/?x=10800&y=10000&zoom=14` (`zoom` is the Deep Zoom level, 12 to 22; zooming out further is blocked).
 - If the server stops or the mod stops writing for 3 intervals, the map shows nobody online and an offline notice.
 
 ## Security

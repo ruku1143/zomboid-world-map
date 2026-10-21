@@ -11,6 +11,9 @@ export function dziToGame(dx, dy, m) {
   return { x: ax / (2 * m.isoHalfSqr) + ay / (2 * m.isoQuarterSqr), y: -ax / (2 * m.isoHalfSqr) + ay / (2 * m.isoQuarterSqr) };
 }
 
+// Zooming out further than this shows incomplete, blocky tiles on the coarse levels of the tile host.
+export const MIN_ZOOM = 12;
+
 // URL "zoom" is the Deep Zoom level whose resolution matches the view:
 // canvas px per dzi px = 2^(zoom - maxLevel).
 export const scaleForZoom = (zoom, m) => 2 ** (zoom - m.maxLevel);
@@ -30,5 +33,5 @@ export function parseView(search, m) {
   const y = parseFloat(q.get("y"));
   const zoom = parseFloat(q.get("zoom"));
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-  return { x, y, zoom: Number.isFinite(zoom) ? Math.min(m.maxLevel, Math.max(8, zoom)) : 14 };
+  return { x, y, zoom: Number.isFinite(zoom) ? Math.min(m.maxLevel, Math.max(MIN_ZOOM, zoom)) : 14 };
 }
