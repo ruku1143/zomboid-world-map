@@ -19,7 +19,7 @@ Why a mod rather than less invasive options: nothing else gives live coordinates
 
 Build 42 specifics: `getFileWriter` accepts `.txt` but rejects `.json` (upstream notes this from buildid 24449161), Lua cannot create folders, and a local mod needs a `42/` version folder plus `common/`. With `PauseEmpty=true` the world tick stops when nobody is online, so the mod hooks `Events.OnTickEvenPaused`.
 
-Install: copy `mod/ZMapPositions` into `<Zomboid>/mods/` and add `ZMapPositions` to `Mods=`. Open item to verify on the real server: whether clients object to a mod that is listed in `Mods=` but not on the Workshop. The fallback is a loose file in `<install>/media/lua/server/` (needs `DoLuaChecksum=false`).
+Install: copy the Lua file to `<install>/media/lua/server/` with `DoLuaChecksum=false`. Verified on the real server: listing it in `Mods=` without a Workshop item makes clients fail with `Mod "ZMapPositions" is not installed`, so the loose file is the install path until it is published to the Workshop.
 
 ## 2. Map tiles source
 
