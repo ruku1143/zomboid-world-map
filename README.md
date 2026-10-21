@@ -93,7 +93,9 @@ It skips tiles that are already cached, so it is safe to re-run (for example aft
 Generating tiles from the game files instead is not practical: the map art on the tile host comes from rendering the game's lot files and texture packs with an offline tool, which needs the full game data and takes hours. The game's own world map (`worldmap.xml.bin`) is a vector map with a different look and would need its own renderer, so it is not supported here.
 
 ## Update
-`cd /srv/zomboid-map && sudo git pull && sudo systemctl restart zmap`
+`sudo -u zmap git -C /srv/zomboid-map pull && sudo systemctl restart zmap`
+
+Run git as the `zmap` user, who owns the checkout. Plain `sudo git pull` runs as root and git refuses with `detected dubious ownership`. (If you cloned as another user, `sudo git config --global --add safe.directory /srv/zomboid-map` also works.)
 
 ## Configuration
 All via environment variables in `/etc/zmap.env`, see [deploy/zmap.env.example](deploy/zmap.env.example). Default port 8780 on loopback; change `PORT` if something else on the host uses it.
