@@ -186,5 +186,5 @@ test("resolveMap falls back to the baked 42.20.0 geometry when descriptors are u
   const r = await resolveMap(cfg);
   assert.equal(r.source, "fallback");
   assert.equal(r.map.dir, "42.20.0");
-  assert.ok(r.reason);
+  assert.match(r.reason, /42\.20\.0: curl failed|42\.20\.0: layer0\.dzi HTTP 0/);
 });

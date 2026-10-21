@@ -162,10 +162,13 @@ function curlGet(url, timeoutS = 8) {
 
 // ---- map discovery --------------------------------------------------------
 
+// Returns {map} on success, or {why} naming the HTTP status of each descriptor.
 async function fetchDescriptors(cfg, dir) {
   const base = `${cfg.tilesRoot}/${dir}/base`;
   const [dziRes, infoRes] = await Promise.all([curlGet(`${base}/layer0.dzi`), curlGet(`${base}/map_info.json`)]);
-  if (dziRes.status !== 200 || infoRes.status !== 200) return null;
+  if (dziRes.status !== 200 || infoRes.status !== 200) {
+    return { why: `${dir}: layer0.dzi HTTP ${dziRes.status}, map_info.json HTTP ${infoRes.status}` };
+  }
   const xml = dziRes.body.toString("utf8");
   const tileSize = Number(xml.match(/TileSize="(\d+)"/)?.[1]);
   const width = Number(xml.match(/Width="(\d+)"/)?.[1]);
@@ -174,14 +177,16 @@ async function fetchDescriptors(cfg, dir) {
   try {
     info = JSON.parse(infoRes.body.toString("utf8"));
   } catch {
-    return null;
+    return { why: `${dir}: map_info.json is not JSON` };
   }
   const x0 = Number(info?.x0);
   const y0 = Number(info?.y0);
   const sqr = Number(info?.sqr);
   const skip = Number(info?.skip);
-  if (!tileSize || !width || !height || !Number.isFinite(x0) || !Number.isFinite(y0) || !sqr) return null;
-  return mapFromDescriptors(dir, { tileSize, width, height }, { x0, y0, sqr, scale: 1 << (Number.isFinite(skip) ? skip : 0) });
+  if (!tileSize || !width || !height || !Number.isFinite(x0) || !Number.isFinite(y0) || !sqr) {
+    return { why: `${dir}: descriptors missing expected fields` };
+  }
+  return { map: mapFromDescriptors(dir, { tileSize, width, height }, { x0, y0, sqr, scale: 1 << (Number.isFinite(skip) ? skip : 0) }) };
 }
 
 // Candidate build directories, best first: explicit override, the running game
@@ -205,18 +210,18 @@ export async function resolveMap(cfg) {
   if (!mapInflight) {
     mapInflight = (async () => {
       const build = readBuildInfo(cfg);
-      let reason = null;
+      const reasons = [];
       for (const dir of mapCandidates(cfg, build)) {
         try {
-          const map = await fetchDescriptors(cfg, dir);
-          if (map) return (mapState = { map, source: "dynamic", reason: null, at: Date.now() });
-          reason = `no map descriptors for ${dir}`;
+          const r = await fetchDescriptors(cfg, dir);
+          if (r.map) return (mapState = { map: r.map, source: "dynamic", reason: null, at: Date.now() });
+          reasons.push(r.why);
         } catch (e) {
-          reason = `descriptor request failed (${e.code === "ENOENT" ? "curl not installed" : e.message})`;
+          reasons.push(`${dir}: ${e.code === "ENOENT" ? "curl is not installed" : `curl failed (${e.message})`}`);
           if (e.code === "ENOENT") break;
         }
       }
-      return (mapState = { map: MAP_FALLBACK, source: "fallback", reason, at: Date.now() });
+      return (mapState = { map: MAP_FALLBACK, source: "fallback", reason: reasons.join("; "), at: Date.now() });
     })().finally(() => {
       mapInflight = null;
     });
