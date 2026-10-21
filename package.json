@@ -5,6 +5,7 @@
   "type": "module",
   "license": "MIT",
   "private": true,
+  "repository": { "type": "git", "url": "git+https://github.com/ruku1143/zomboid-world-map.git" },
   "engines": { "node": ">=20" },
   "scripts": {
     "start": "node server.js",

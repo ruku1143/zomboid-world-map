@@ -10,14 +10,14 @@ How it works: the mod writes online players to `<Zomboid data>/Lua/zmap_players.
 - Outbound HTTPS to `tiles.pzmap.org` (tiles are cached on disk after the first view).
 - Optional: `cloudflared` for public access, see [deploy/cloudflared.md](deploy/cloudflared.md).
 
-## Install (Ubuntu, following the `/srv/<game>-server` layout)
-Paths assume the PZ server is in `/srv/zomboid-server` (user `zomboid`, data in `/srv/zomboid-server/Zomboid`, server name `pzserver`). Adjust if yours differ.
+## Install (Ubuntu example)
+The commands below assume the PZ server is installed in `/srv/zomboid-server`, runs as user `zomboid` under systemd as `zomboid.service` (data in `/srv/zomboid-server/Zomboid`, server name `pzserver`), and that the map lives in `/srv/zomboid-map`. Adjust the paths, user and service names to match your setup.
 
-1. Service user and code (installed in `/srv/zomboid-map`, like the other game servers):
+1. Service user and code:
    ```
    sudo useradd -r -M -s /usr/sbin/nologin -d /srv/zomboid-map zmap
    sudo usermod -aG zomboid zmap          # read access to the PZ data
-   sudo usermod -aG zmap administrator    # edit the map files without sudo (re-login to apply)
+   sudo usermod -aG zmap "$USER"          # optional: edit the map files without sudo (re-login to apply)
    sudo git clone https://github.com/ruku1143/zomboid-world-map /srv/zomboid-map
    sudo chown -R zmap:zmap /srv/zomboid-map
    sudo chmod -R g+rwX /srv/zomboid-map
@@ -61,7 +61,7 @@ Tiles that the host has not rendered (the large black areas around the island) a
 `cd /srv/zomboid-map && sudo git pull && sudo systemctl restart zmap`
 
 ## Configuration
-All via environment variables in `/etc/zmap.env`, see [deploy/zmap.env.example](deploy/zmap.env.example). Default port 8780 on loopback, so it does not clash with Minecraft or BeamMP.
+All via environment variables in `/etc/zmap.env`, see [deploy/zmap.env.example](deploy/zmap.env.example). Default port 8780 on loopback; change `PORT` if something else on the host uses it.
 
 ## Using the map
 - Drag to pan, wheel or pinch to zoom, tap a player in the list to centre on them. The bottom corner shows the world coordinate under the cursor.
@@ -75,4 +75,7 @@ No login in the app. The page shows live player names and locations, so do not e
 `npm test` (Node's built-in runner, no install step).
 
 ## Tile source note
-Tiles are third-party images served by `tiles.pzmap.org`. This project caches them and sends a descriptive User-Agent, but does not ship them. Respect that host's terms.
+Map tiles are third-party images served by `tiles.pzmap.org`. This project fetches them on demand, caches them on disk and sends a descriptive User-Agent, but does not ship them. It is not affiliated with that site or with The Indie Stone, and Project Zomboid is a trademark of its owners. Respect the tile host's terms, and do not point many public clients at it without caching.
+
+## License
+MIT, see [LICENSE](LICENSE). Forked from [fpsacha/zomboid-control-panel](https://github.com/fpsacha/zomboid-control-panel); the upstream history is kept.

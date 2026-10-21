@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Syntax check
+        run: |
+          node --check server.js
+          for f in public/*.js; do node --check "$f"; done
+      - name: Tests
+        run: npm test
+
+  lua:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua 5.1 (Project Zomboid's Kahlua is 5.1-compatible)
+        run: sudo apt-get update && sudo apt-get install -y lua5.1
+      - name: Syntax check the mod
+        run: luac5.1 -p mod/ZMapPositions/42/media/lua/server/ZMapPositions.lua
+      - name: Check the Build 42 mod layout
+        run: |
+          test -f mod/ZMapPositions/42/mod.info
+          test -d mod/ZMapPositions/common
+          test -f mod/ZMapPositions/42/media/lua/server/ZMapPositions.lua
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No env files or obvious secrets committed
+        run: |
+          if git ls-files | grep -E '(^|/)\.env($|\.)' | grep -v 'zmap.env.example'; then
+            echo "env file committed"; exit 1
+          fi
+          if git grep -nIE '(password|secret|token|api[_-]?key)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']{8,}' -- . ':!test' ':!README.md' ':!deploy'; then
+            echo "possible secret committed"; exit 1
+          fi
