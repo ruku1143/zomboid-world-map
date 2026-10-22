@@ -177,7 +177,7 @@ function drawPlayers() {
   ctx.font = "600 13px system-ui, sans-serif";
   ctx.textBaseline = "middle";
   for (const p of players) {
-    const d = gameToDzi(p.x, p.y, meta.map);
+    const d = gameToDzi(p.dx, p.dy, meta.map);
     const s = toScreen(d.x, d.y);
     if (s.x < -100 || s.y < -20 || s.x > innerWidth + 100 || s.y > innerHeight + 20) continue;
     ctx.beginPath();
@@ -194,7 +194,28 @@ function drawPlayers() {
   }
 }
 
-function loop() {
+// Ease each player's displayed position toward its latest reported one.
+const GLIDE_MS = 300; // time constant of the glide
+const SNAP_TILES = 500; // farther than this is a teleport/respawn: jump instead of gliding
+let lastFrame = 0;
+function glidePlayers(now) {
+  const dt = lastFrame ? Math.min(now - lastFrame, 100) : 0;
+  lastFrame = now;
+  const k = 1 - Math.exp(-dt / GLIDE_MS);
+  for (const p of players) {
+    const ex = p.x - p.dx, ey = p.y - p.dy;
+    if (ex === 0 && ey === 0) continue;
+    if (Math.hypot(ex, ey) < 0.05 || Math.hypot(ex, ey) > SNAP_TILES) {
+      p.dx = p.x; p.dy = p.y;
+    } else {
+      p.dx += ex * k; p.dy += ey * k;
+    }
+    dirty = true;
+  }
+}
+
+function loop(now) {
+  glidePlayers(now);
   if (dirty) { dirty = false; draw(); }
   requestAnimationFrame(loop);
 }
@@ -273,7 +294,13 @@ function ago(ms) {
 }
 
 function renderPlayers(data) {
+  const prev = new Map(players.map((p) => [p.name, p]));
   players = data.players;
+  for (const p of players) {
+    const old = prev.get(p.name);
+    p.dx = old ? old.dx : p.x;
+    p.dy = old ? old.dy : p.y;
+  }
   colors = assignColors(players.map((p) => p.name));
   const list = $("players");
   list.replaceChildren(...players.map((p) => {
