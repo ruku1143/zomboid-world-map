@@ -82,41 +82,26 @@ function pump() {
 // error. Nothing is drawn for an "empty" tile: the host has no map there.
 function drawTile(l, c, r, x, y, size) {
   const t = tiles.get(tileKey(l, c, r));
-  if (t === "empty") return "empty";
+  if (t === "empty") return;
   if (isReady(t)) {
     touch(tileKey(l, c, r));
     const d = exactTileRect(t.width, t.height, size, meta.map);
     ctx.drawImage(t, x, y, d.w + 1, d.h + 1);
-    return `exact ${t.width}x${t.height}`;
+    return;
   }
   for (let up = 1, pc = c, pr = r; up <= MAX_FALLBACK && l - up >= 0; up++) {
     pc >>= 1; pr >>= 1;
     const pl = l - up;
     const parent = tiles.get(tileKey(pl, pc, pr));
-    if (parent === "empty") return "empty parent";
+    if (parent === "empty") return;
     if (isReady(parent)) {
       touch(tileKey(pl, pc, pr));
       const k = parentCrop(c, r, up, parent.width, parent.height, meta.map);
       if (k) ctx.drawImage(parent, k.sx, k.sy, k.sw, k.sh, x, y, size * k.fw + 1, size * k.fh + 1);
-      return `stand-in from level ${pl} ${parent.width}x${parent.height}`;
+      return;
     }
     requestTile(pl, pc, pr);
   }
-  return typeof t === "object" && t?.retryAt ? "FAILED, retrying" : "loading";
-}
-
-// Add &debug=1 to the URL: outlines every tile with what was drawn for it.
-const DEBUG = new URLSearchParams(location.search).has("debug");
-function debugTile(l, c, r, x, y, size, what) {
-  ctx.strokeStyle = what.startsWith("exact") ? "#3ddc84" : "#ff4d4d";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x, y, size, size);
-  ctx.font = "12px monospace";
-  ctx.fillStyle = "#000";
-  ctx.fillRect(x + 4, y + 4, 330, 34);
-  ctx.fillStyle = "#fff";
-  ctx.fillText(`L${l} ${c}_${r}  ${what}`, x + 8, y + 18);
-  ctx.fillText(`cell ${Math.round(size)}px, dpr ${window.devicePixelRatio}`, x + 8, y + 32);
 }
 
 // ---- rendering ------------------------------------------------------------
@@ -146,8 +131,7 @@ function draw() {
     for (let c = c0; c <= c1; c++) {
       const s = toScreen(c * span, r * span);
       requestTile(level, c, r);
-      const what = drawTile(level, c, r, s.x, s.y, span * cam.scale);
-      if (DEBUG) debugTile(level, c, r, s.x, s.y, span * cam.scale, what || "none");
+      drawTile(level, c, r, s.x, s.y, span * cam.scale);
     }
   }
   if (showSafehouses) drawSafehouses();
@@ -358,31 +342,21 @@ async function poll() {
   setTimeout(poll, meta.refreshSeconds * 1000);
 }
 
-function banner(text, level = "warn") {
+function banner(text) {
   $("bannerText").textContent = text;
-  $("banner").className = level;
   $("banner").hidden = !text;
 }
-// A dismissed info banner stays dismissed for this browser; it only returns if the map directory changes.
-const dismissKey = () => `zmap-banner-${meta?.map?.dir}`;
-function bannerDismissed() {
-  try { return localStorage.getItem(dismissKey()) === "1"; } catch { return false; }
-}
-$("bannerClose").addEventListener("click", () => {
-  $("banner").hidden = true;
-  try { localStorage.setItem(dismissKey(), "1"); } catch {}
-});
+$("bannerClose").addEventListener("click", () => { $("banner").hidden = true; });
 
 // ---- boot -----------------------------------------------------------------
 async function init() {
   meta = await (await fetch("api/meta")).json();
   minScale = scaleForZoom(MIN_ZOOM, meta.map);
-  tileVersion = encodeURIComponent(`${meta.map.dir}-${meta.map.tileSize}-${meta.build.buildId ?? ""}`);
+  tileVersion = `${meta.map.dir}-${meta.map.tileSize}`;
   document.title = `${meta.serverName} Map`;
   $("version").textContent = ["v" + meta.app?.version, meta.app?.commit].filter((x) => x && x !== "vundefined" && x !== "vnull").join(" · ");
   $("title").textContent = meta.serverName;
-  if (meta.build.supported === false) banner(`Game version ${meta.build.version} is not Build 42. The map shown may not match this world.`);
-  else if (meta.mapSource === "fallback" && !bannerDismissed()) banner(`Showing the ${meta.map.dir} map. The tile host did not answer for the running version (${meta.mapNote}), so the built-in ${meta.map.dir} layout is used. This is fine unless the game map changed in a newer build.`, "info");
+  if (meta.build.supported === false) banner(`Game version ${meta.build.version} is a different build than the map (Build ${meta.map.dir.split(".")[0]}). The map may not match this world.`);
   const view = parseView(location.search, meta.map);
   if (view) {
     const d = gameToDzi(view.x, view.y, meta.map);

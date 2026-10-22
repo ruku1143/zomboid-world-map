@@ -5,8 +5,8 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import {
-  MAP_FALLBACK, mapFromDescriptors, mapCandidates, loadConfig, readPlayers, readBuildInfo,
-  readVersion, cleanSafehouses, checkBuildChange, cacheTile, readCachedTile, createServer, resolveMap, _resetMapState,
+  MAP, mapFromDescriptors, loadConfig, readPlayers, readBuildInfo,
+  readVersion, cleanSafehouses, cacheTile, readCachedTile, createServer,
 } from "../server.js";
 import { prefetch } from "../prefetch.js";
 import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, assignColors, colorForName, safehouseCorners, PLAYER_COLORS, MIN_ZOOM } from "../public/projection.js";
@@ -15,17 +15,15 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "zmap-"));
 
 function setup(extra = {}) {
   const dataPath = tmp();
-  const installPath = tmp();
   fs.mkdirSync(path.join(dataPath, "Lua"));
-  fs.mkdirSync(path.join(installPath, "steamapps"));
-  const cfg = loadConfig({ PZ_DATA_PATH: dataPath, PZ_INSTALL_PATH: installPath, TILE_CACHE_DIR: tmp(), REFRESH_SECONDS: "5", ...extra });
-  return { cfg, dataPath, installPath };
+  const cfg = loadConfig({ PZ_DATA_PATH: dataPath, TILE_CACHE_DIR: tmp(), REFRESH_SECONDS: "5", ...extra });
+  return { cfg, dataPath };
 }
 
 const listen = (server) => new Promise((r) => server.listen(0, "127.0.0.1", () => r(`http://127.0.0.1:${server.address().port}`)));
 
 test("projection round-trips and matches the 42.20.0 origin", () => {
-  const m = MAP_FALLBACK;
+  const m = MAP;
   for (const [x, y] of [[0, 0], [10800, 10000], [12000, 8000]]) {
     const d = gameToDzi(x, y, m);
     const g = dziToGame(d.x, d.y, m);
@@ -73,7 +71,7 @@ test("assignColors: stable per name, distinct among online players, and falls ba
 });
 
 test("safehouseCorners is the rectangle as a diamond in dzi pixels", () => {
-  const m = MAP_FALLBACK;
+  const m = MAP;
   const c = safehouseCorners({ x: 100, y: 200, w: 10, h: 20 }, m);
   assert.deepEqual(c[0], gameToDzi(100, 200, m));
   assert.deepEqual(c[2], gameToDzi(110, 220, m));
@@ -113,7 +111,7 @@ test("readPlayers returns safehouses, and keeps them when the file goes stale", 
 });
 
 test("edge tiles cover only their real share of the cell", () => {
-  const m = MAP_FALLBACK;
+  const m = MAP;
   // 42.20.0 level 12 tile 0_0 is 2048x996: a cell shown at 512px is 512 wide and ~249 tall, not 512 square.
   const d = exactTileRect(2048, 996, 512, m);
   assert.equal(d.w, 512);
@@ -121,7 +119,7 @@ test("edge tiles cover only their real share of the cell", () => {
 });
 
 test("stand-in crops use the nominal tile size, not the ancestor's bitmap size", () => {
-  const m = MAP_FALLBACK;
+  const m = MAP;
   // Level 16 cell (6, 3) inside level 13 tile (0, 0), which is 2048x1991: 3 levels up, 8 cells per side.
   const k = parentCrop(6, 3, 3, 2048, 1991, m);
   assert.deepEqual([k.sx, k.sy, k.sw, k.sh, k.fw, k.fh], [6 * 256, 3 * 256, 256, 256, 1, 1]);
@@ -140,7 +138,7 @@ test("scale divides the projection (skip > 0)", () => {
 });
 
 test("level and zoom helpers", () => {
-  const m = MAP_FALLBACK;
+  const m = MAP;
   assert.equal(m.maxLevel, 22);
   assert.equal(scaleForZoom(m.maxLevel, m), 1);
   assert.equal(zoomForScale(scaleForZoom(14, m), m), 14);
@@ -150,7 +148,7 @@ test("level and zoom helpers", () => {
 });
 
 test("parseView reads shareable URL params", () => {
-  const m = MAP_FALLBACK;
+  const m = MAP;
   assert.deepEqual(parseView("?x=10000&y=9000&zoom=13", m), { x: 10000, y: 9000, zoom: 13 });
   assert.equal(parseView("?zoom=3", m), null);
   assert.equal(MIN_ZOOM, 12.1);
@@ -186,49 +184,34 @@ test("readPlayers: an empty list is online-with-nobody, not offline", () => {
   assert.deepEqual(r.players, []);
 });
 
-test("readBuildInfo parses manifest and console version; B42 is supported", () => {
-  const { cfg, dataPath, installPath } = setup();
-  fs.writeFileSync(path.join(installPath, "steamapps", "appmanifest_380870.acf"), '"AppState"\n{\n\t"buildid"\t\t"25485538"\n}');
+test("readBuildInfo reads the console version and compares only the major build with the map", () => {
+  const { cfg, dataPath } = setup();
+  assert.deepEqual(readBuildInfo(cfg), { version: null, supported: null });
   fs.writeFileSync(path.join(dataPath, "server-console.txt"), "version=42.21.0 4a0e9546ec demo=false\nmore");
-  assert.deepEqual(readBuildInfo(cfg), { buildId: "25485538", branch: null, version: "42.21.0", supported: true });
+  assert.deepEqual(readBuildInfo(cfg), { version: "42.21.0", supported: true }, "42.21.0 against the 42.20.0 map is fine");
+  fs.writeFileSync(path.join(dataPath, "server-console.txt"), "version=43.0.1");
+  assert.equal(readBuildInfo(cfg).supported, false);
   fs.writeFileSync(path.join(dataPath, "server-console.txt"), "version=41.78.16");
   assert.equal(readBuildInfo(cfg).supported, false);
   fs.writeFileSync(path.join(dataPath, "server-console.txt"), "-----\nlog started\nversion=42.21.0 4a0e9546ec demo=false\n");
   assert.equal(readBuildInfo(cfg).version, "42.21.0", "version need not be on the first line");
 });
 
-test("mapCandidates: override, running version, fallback, no duplicates", () => {
-  const cfg = loadConfig({ MAP_DIR: "42.30.0" });
-  assert.deepEqual(mapCandidates(cfg, { version: "42.21.0" }), ["42.30.0", "42.21.0", "42.20.0"]);
-  assert.deepEqual(mapCandidates(loadConfig({}), { version: "42.20.0" }), ["42.20.0"]);
-  assert.deepEqual(mapCandidates(loadConfig({}), null), ["42.20.0"]);
-});
-
-test("tile cache evicts oldest and purges on build change", () => {
+test("tile cache evicts the oldest tiles when it is over its limit", () => {
   const { cfg } = setup();
   cfg.tileCacheMaxBytes = 25;
-  cacheTile(cfg, "42.21.0/1/0_0.jpg", Buffer.alloc(10));
-  cacheTile(cfg, "42.21.0/1/0_1.jpg", Buffer.alloc(10));
-  cacheTile(cfg, "42.21.0/1/1_0.jpg", Buffer.alloc(10));
-  assert.equal(readCachedTile(cfg, "42.21.0/1/0_0.jpg"), null);
-  assert.ok(readCachedTile(cfg, "42.21.0/1/1_0.jpg"));
-
-  assert.equal(checkBuildChange(cfg, { buildId: "1" }), false);
-  assert.equal(checkBuildChange(cfg, { buildId: "1" }), false);
-  assert.ok(readCachedTile(cfg, "42.21.0/1/1_0.jpg"));
-  assert.equal(checkBuildChange(cfg, { buildId: "2" }), true);
-  assert.equal(readCachedTile(cfg, "42.21.0/1/1_0.jpg"), null);
+  cacheTile(cfg, "42.20.0/1/0_0.jpg", Buffer.alloc(10));
+  cacheTile(cfg, "42.20.0/1/0_1.jpg", Buffer.alloc(10));
+  cacheTile(cfg, "42.20.0/1/1_0.jpg", Buffer.alloc(10));
+  assert.equal(readCachedTile(cfg, "42.20.0/1/0_0.jpg"), null);
+  assert.ok(readCachedTile(cfg, "42.20.0/1/1_0.jpg"));
 });
 
-// A fake tiles host: serves descriptors for 42.21.0 only, one real tile, 404 for the rest.
+// A fake tiles host: one real 42.20.0 tile, 404 for the rest.
 function fakeTilesHost(hits) {
   return http.createServer((req, res) => {
     hits.push(req.url);
-    if (req.url === "/42.21.0/base/layer0.dzi") {
-      res.end('<Image TileSize="2048" Overlap="0" Format="jpg"><Size Width="2318656" Height="1019040"/></Image>');
-    } else if (req.url === "/42.21.0/base/map_info.json") {
-      res.end(JSON.stringify({ x0: 1040384, y0: -139296, sqr: 128, skip: 0 }));
-    } else if (req.url === "/42.21.0/base/layer0_files/15/3_2.jpg") {
+    if (req.url === "/42.20.0/base/layer0_files/15/3_2.jpg") {
       res.setHeader("Content-Type", "image/jpeg");
       res.end("JPEGDATA");
     } else {
@@ -239,7 +222,6 @@ function fakeTilesHost(hits) {
 }
 
 test("prefetch downloads every rendered cell once and skips cached ones", async () => {
-  _resetMapState();
   const hits = [];
   const host = http.createServer((req, res) => {
     hits.push(req.url);
@@ -264,8 +246,7 @@ test("prefetch downloads every rendered cell once and skips cached ones", async 
   }
 });
 
-test("resolveMap reads descriptors for the running version; tiles 404 stay empty and are not re-requested", async () => {
-  _resetMapState();
+test("server: meta, players and tiles; 404 tiles stay empty and are not re-requested", async () => {
   const hits = [];
   const host = fakeTilesHost(hits);
   const hostUrl = await listen(host);
@@ -276,8 +257,8 @@ test("resolveMap reads descriptors for the running version; tiles 404 stay empty
   const base = await listen(server);
   try {
     const meta = await (await fetch(`${base}/api/meta`)).json();
-    assert.equal(meta.mapSource, "dynamic");
-    assert.equal(meta.map.dir, "42.21.0");
+    assert.equal(meta.map.dir, "42.20.0");
+    assert.equal(meta.mapSource, undefined, "no discovery fields any more");
     assert.equal(meta.app.version, readVersion().version);
     assert.equal(meta.map.tileSize, 2048);
     assert.equal(meta.map.isoX0, 1040384);
@@ -290,7 +271,7 @@ test("resolveMap reads descriptors for the running version; tiles 404 stay empty
     assert.equal(ok.status, 200);
     assert.equal(await ok.text(), "JPEGDATA");
     assert.equal((await fetch(`${base}/tiles/15/3_2.jpg`)).headers.get("x-tile-cache"), "hit");
-    assert.equal((await fetch(`${base}/tiles/15/3_2.jpg?v=42.21.0-2048-1`)).status, 200, "the cache-busting query is ignored");
+    assert.equal((await fetch(`${base}/tiles/15/3_2.jpg?v=42.20.0-2048`)).status, 200, "the cache-busting query is ignored");
 
     const before = hits.length;
     assert.equal((await fetch(`${base}/tiles/15/9_9.jpg`)).status, 404);
@@ -310,11 +291,3 @@ test("resolveMap reads descriptors for the running version; tiles 404 stay empty
   }
 });
 
-test("resolveMap falls back to the baked 42.20.0 geometry when descriptors are unreachable", async () => {
-  _resetMapState();
-  const { cfg } = setup({ TILES_ROOT: "http://127.0.0.1:9" });
-  const r = await resolveMap(cfg);
-  assert.equal(r.source, "fallback");
-  assert.equal(r.map.dir, "42.20.0");
-  assert.match(r.reason, /42\.20\.0: curl failed|42\.20\.0: layer0\.dzi HTTP 0/);
-});

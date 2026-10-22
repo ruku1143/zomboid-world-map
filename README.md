@@ -2,11 +2,11 @@
 
 A small read-only web map showing connected players on a Project Zomboid **Build 42** dedicated server. Zero npm dependencies: one Node file, a vanilla JS canvas client and a tiny server-side Lua mod. Forked from [fpsacha/zomboid-control-panel](https://github.com/fpsacha/zomboid-control-panel), see [CHANGES.md](CHANGES.md) and [DISCOVERY.md](DISCOVERY.md).
 
-How it works: the mod writes online players to `<Zomboid data>/Lua/zmap_players.txt` every 2 s (Build 42 only lets mods write `.txt` files, so the JSON lives in a `.txt`); `server.js` serves that file, discovers the matching map build on `tiles.pzmap.org` from the running game version, proxies and caches the tiles, and serves the page.
+How it works: the mod writes online players to `<Zomboid data>/Lua/zmap_players.txt` every 2 s (Build 42 only lets mods write `.txt` files, so the JSON lives in a `.txt`); `server.js` serves that file, proxies and caches the map tiles from `tiles.pzmap.org` (the 42.20.0 render, the newest published), and serves the page.
 
 ## Requirements
 - Node.js 20 or newer (Ubuntu's apt Node is often older: use NodeSource or nvm).
-- `curl` (present on Ubuntu). Used to read the map descriptors, because Cloudflare in front of the tile host can challenge Node's TLS stack.
+- `curl` (present on Ubuntu). Used as a fallback when fetching tiles, because Cloudflare in front of the tile host can challenge Node's TLS stack.
 - Outbound HTTPS to `tiles.pzmap.org` (tiles are cached on disk after the first view).
 - Optional: `cloudflared` for public access, see [deploy/cloudflared.md](deploy/cloudflared.md).
 
@@ -53,9 +53,9 @@ The `zmap` service sandbox (`ProtectSystem=strict`) can only write to `/var/cach
 | "Positions file not found. Is the ZMapPositions mod loaded?" | `Lua/zmap_players.txt` does not exist | `journalctl -u zomboid \| grep -i zmap`: expect `[ZMapPositions] loaded`. check that the script is in `<install>/media/lua/server/` and the server was restarted after copying it |
 | "No update for Ns. The server may be stopped." | The file exists but stopped refreshing | Is `zomboid` running? Look for `[ZMapPositions] write failed:` in the journal |
 | "Nobody is online." | All good, the mod is writing an empty list | |
-| Yellow/red banner about the map | Descriptors for your game version could not be fetched, so the 42.20.0 layout is used and markers may be slightly off | `curl -sI https://tiles.pzmap.org/<version>/base/layer0.dzi`; set `MAP_DIR` in `/etc/zmap.env` to force a build directory |
+| Red banner "Game version X is a different build than the map" | The server runs a different major build (for example 43) than the map's (42) | See "When a new game build is published" below |
 
-The banner about the map layout is informational: the host publishes tiles up to 42.20.0 and blocks the descriptor files for newer versions, so the built-in 42.20.0 layout is used. Close it once and it stays closed in that browser.
+The map is the 42.20.0 render while the server may run a newer 42.x (for example 42.21.0). Only a change of the major number triggers the banner above.
 
 Tiles that the host has not rendered (the large black areas around the island) are expected: the map shows nothing there.
 
@@ -91,6 +91,12 @@ sudo -u zmap bash -c 'set -a; . /etc/zmap.env; node /srv/zomboid-map/prefetch.js
 It skips tiles that are already cached, so it is safe to re-run (for example after a game update clears the cache). Level 17 and below covers the whole-world and town views (URL `zoom` 17 and below); deeper levels are still fetched on demand. While a tile loads, a blurrier stand-in from a coarser level is shown, so a warm cache also removes that.
 
 Generating tiles from the game files instead is not practical: the map art on the tile host comes from rendering the game's lot files and texture packs with an offline tool, which needs the full game data and takes hours. The game's own world map (`worldmap.xml.bin`) is a vector map with a different look and would need its own renderer, so it is not supported here.
+
+## When a new game build is published
+The map layout (tile size, image size and projection origin) is one constant, `MAP` in `server.js`. The tile host blocks the files that describe it from servers, so it is copied by hand. When a new build such as 43.0.0 gets tiles on `tiles.pzmap.org`:
+1. Check the host has tiles: open `https://tiles.pzmap.org/<version>/base/layer0_files/12/0_0.jpg` in a browser.
+2. Open `https://tiles.pzmap.org/<version>/base/layer0.dzi` and `.../map_info.json` in a browser. Copy `TileSize`, `Width`, `Height` from the first and `x0`, `y0`, `sqr`, `skip` from the second into the `mapFromDescriptors(...)` call for `MAP` (the directory name is the first argument; `scale` is `2 ** skip`).
+3. Pull, restart `zmap`, run `prefetch.js`, and check a player's dot lines up with the terrain.
 
 ## Update
 `sudo -u zmap git -C /srv/zomboid-map pull && sudo systemctl restart zmap`
