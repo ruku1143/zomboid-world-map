@@ -174,31 +174,40 @@ function drawSafehouses() {
 }
 
 function drawPlayers() {
-  ctx.font = "600 13px system-ui, sans-serif";
+  ctx.font = "14px system-ui, sans-serif"; // same as the player list
   ctx.textBaseline = "middle";
   for (const p of players) {
     const d = gameToDzi(p.dx, p.dy, meta.map);
     const s = toScreen(d.x, d.y);
     if (s.x < -100 || s.y < -20 || s.x > innerWidth + 100 || s.y > innerHeight + 20) continue;
+    // Same look as the list swatch (.swatch): colour disc, dark border, faint light outer ring.
+    const R = 7;
     ctx.beginPath();
-    ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
+    ctx.arc(s.x, s.y, R + 1.4, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, R, 0, Math.PI * 2);
+    ctx.fillStyle = "#12151a";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, R - 2, 0, Math.PI * 2);
     ctx.fillStyle = colors.get(p.name) || "#f2b134";
     ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "#12151a";
-    ctx.stroke();
     if (p.hp !== null && p.hp !== undefined) {
       // Small health bar under the dot: green to red.
-      const w = 22, x = s.x - w / 2, y = s.y + 11;
+      const w = 22, x = s.x - w / 2, y = s.y + 12;
       ctx.fillStyle = "#12151a";
       ctx.fillRect(x - 1, y - 1, w + 2, 6);
       ctx.fillStyle = `hsl(${Math.round(p.hp * 1.2)}, 75%, 50%)`;
       ctx.fillRect(x, y, (w * p.hp) / 100, 4);
     }
     ctx.lineWidth = 3;
-    ctx.strokeText(p.name, s.x + 12, s.y);
-    ctx.fillStyle = "#fff";
-    ctx.fillText(p.name, s.x + 12, s.y);
+    ctx.strokeStyle = "#12151a";
+    const label = p.car ? `${p.name} 🚗` : p.name;
+    ctx.strokeText(label, s.x + 14, s.y);
+    ctx.fillStyle = "#e6e9ee"; // --text
+    ctx.fillText(label, s.x + 14, s.y);
   }
 }
 
@@ -320,7 +329,7 @@ function renderPlayers(data) {
     const swatch = document.createElement("i");
     swatch.className = "swatch";
     swatch.style.background = colors.get(p.name);
-    name.append(swatch, p.name);
+    name.append(swatch, p.car ? `${p.name} 🚗` : p.name);
     const sub = document.createElement("small");
     sub.textContent = `${p.hp == null ? "" : `${p.hp}% HP · `}${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
     li.append(name, sub);

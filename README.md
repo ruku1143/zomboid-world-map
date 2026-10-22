@@ -33,6 +33,8 @@ The commands below assume the PZ server is installed in `/srv/zomboid-server`, r
    ```
    A game update can overwrite `media/lua/server/`: re-copy the file if the map goes quiet after one.
 
+   Privacy options are at the top of `ZMapPositions.lua` (`SHOW_HEALTH`, `SHOW_GAME_TIME`, `SHOW_IN_VEHICLE`, `HIDE_INVISIBLE_ADMINS`, all `true` by default). Set one to `false` in the installed copy and restart the game server to stop sharing it.
+
 3. Config: `sudo cp /srv/zomboid-map/deploy/zmap.env.example /etc/zmap.env`, edit `SERVER_NAME`, then `sudo chown root:zmap /etc/zmap.env && sudo chmod 640 /etc/zmap.env`. The default paths already match this layout.
 4. Run the map service:
    ```

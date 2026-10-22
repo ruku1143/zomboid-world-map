@@ -166,7 +166,9 @@ test("readPlayers: .txt file, fresh, stale, missing and half-written", () => {
   const fresh = readPlayers(cfg);
   assert.equal(fresh.stale, false);
   assert.equal(fresh.reason, null);
-  assert.deepEqual(fresh.players, [{ name: "Bob", x: 10, y: 20, z: 0, hp: null }]);
+  assert.deepEqual(fresh.players, [{ name: "Bob", x: 10, y: 20, z: 0, hp: null, car: null }]);
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [{ name: "A", x: 1, y: 2, car: true }, { name: "B", x: 1, y: 2, car: false }, { name: "C", x: 1, y: 2, car: "yes" }] }));
+  assert.deepEqual(readPlayers(cfg).players.map((p) => p.car), [true, false, null], "only booleans pass for the vehicle flag");
   fs.writeFileSync(file, JSON.stringify({ t: 1, players: [{ name: "A", x: 1, y: 2, hp: 87 }, { name: "B", x: 1, y: 2, hp: 250 }, { name: "C", x: 1, y: 2, hp: "x" }] }));
   assert.deepEqual(readPlayers(cfg).players.map((p) => p.hp), [87, 100, null], "health is clamped to 0-100, junk becomes null");
   const later = readPlayers(cfg, Date.now() + 60_000);
