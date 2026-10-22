@@ -1,7 +1,7 @@
 -- ZMapPositions (Build 42, server side): writes living, connected players and the
 -- server's safehouses to <Zomboid>/Lua/zmap_players.txt every INTERVAL_MS. Write-only:
 -- reads no commands and changes nothing in the game. Players that disconnect or die
--- are simply absent from the next write.
+-- are simply absent from the next write, as are invisible/ghost-mode admins.
 --
 -- Build 42 getFileWriter only accepts a small extension whitelist (.txt is fine,
 -- .json is rejected and returns nil) and Lua cannot create folders, so the JSON
@@ -48,13 +48,21 @@ local function readSafehouses()
     return out
 end
 
+-- Admins using /invisible (or ghost mode) must not show up on the map. Each check is
+-- guarded because not every build exposes both methods.
+local function isHidden(p)
+    if p.isInvisible and p:isInvisible() then return true end
+    if p.isGhostMode and p:isGhostMode() then return true end
+    return false
+end
+
 local function writePositions()
     local players = getOnlinePlayers()
     local parts = {}
     if players then
         for i = 0, players:size() - 1 do
             local p = players:get(i)
-            if p and not p:isDead() then
+            if p and not p:isDead() and not isHidden(p) then
                 table.insert(parts, string.format(
                     '{"name":%s,"x":%d,"y":%d,"z":%d}',
                     jsonString(p:getUsername()),
