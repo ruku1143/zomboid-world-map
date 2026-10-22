@@ -10,15 +10,14 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TILES_ROOT = "https://tiles.pzmap.org";
 const USER_AGENT = "zomboid-world-map/1.0 (+https://github.com/ruku1143/zomboid-world-map)";
 const MOD_INTERVAL_SECONDS = 2; // ZMapPositions.lua write interval
-const POSITIONS_FILES = ["zmap_players.txt", "zmap_players.json"]; // B42 only lets Lua write .txt
-const MAP_TTL_MS = 24 * 60 * 60 * 1000;
-const MAP_RETRY_MS = 60 * 1000;
+const POSITIONS_FILE = "zmap_players.txt"; // B42 only lets Lua write .txt
 const NEGATIVE_TTL_MS = 60 * 60 * 1000;
 const NEGATIVE_MAX = 20000;
 
-// Geometry of the 42.20.0 render on tiles.pzmap.org (from its map_info.json and
-// layer0.dzi). Used only when the real descriptors cannot be fetched.
-export const MAP_FALLBACK = mapFromDescriptors(
+// The map the tiles are for: the 42.20.0 render on tiles.pzmap.org, built from the values in its
+// layer0.dzi and map_info.json. The host blocks those files from servers, so they are copied here
+// by hand; see "When a new game build is published" in the README.
+export const MAP = mapFromDescriptors(
   "42.20.0",
   { tileSize: 2048, width: 2318656, height: 1019040 },
   { x0: 1040384, y0: -139296, sqr: 128, scale: 1 },
@@ -48,14 +47,12 @@ export function loadConfig(env = process.env) {
   return {
     serverName: env.SERVER_NAME || "Project Zomboid",
     dataPath: env.PZ_DATA_PATH || "",
-    installPath: env.PZ_INSTALL_PATH || "",
     refreshSeconds: num(env.REFRESH_SECONDS, 5),
     bindAddr: env.BIND_ADDR || "127.0.0.1",
     port: num(env.PORT, 8780),
     tileCacheDir: env.TILE_CACHE_DIR || path.join(HERE, "tile-cache"),
     tileCacheMaxBytes: num(env.TILE_CACHE_MAX_MB, 1024) * 1024 * 1024,
     tilesRoot: env.TILES_ROOT || TILES_ROOT,
-    mapDir: env.MAP_DIR || "", // optional: force a tiles.pzmap.org build directory
   };
 }
 
@@ -107,19 +104,13 @@ export function cleanSafehouses(raw) {
 // ---- positions ------------------------------------------------------------
 
 export function readPlayers(cfg, now = Date.now()) {
-  let file = null;
-  let stat = null;
-  for (const name of POSITIONS_FILES) {
-    try {
-      const candidate = path.join(cfg.dataPath, "Lua", name);
-      const s = fs.statSync(candidate);
-      if (!stat || s.mtimeMs > stat.mtimeMs) {
-        file = candidate;
-        stat = s;
-      }
-    } catch {}
+  const file = path.join(cfg.dataPath, "Lua", POSITIONS_FILE);
+  let stat;
+  try {
+    stat = fs.statSync(file);
+  } catch {
+    return { available: false, stale: true, reason: "no-file", updatedAt: null, players: [], safehouses: [] };
   }
-  if (!file) return { available: false, stale: true, reason: "no-file", updatedAt: null, players: [], safehouses: [] };
   const ageMs = now - stat.mtimeMs;
   const staleAfterMs = Math.max(cfg.refreshSeconds, MOD_INTERVAL_SECONDS) * 3000;
   const stale = ageMs > staleAfterMs;
@@ -141,17 +132,15 @@ export function readPlayers(cfg, now = Date.now()) {
   return { ...base, players: stale ? [] : players, safehouses };
 }
 
-// ---- build detection ------------------------------------------------------
+// ---- game version ---------------------------------------------------------
 
+const majorOf = (v) => String(v).split(".")[0];
+
+// The running game version from server-console.txt. `supported` compares only the major build
+// (42) with the one the map is for: the server runs 42.21.0 against 42.20.0 tiles, so comparing
+// the full version would warn forever.
 export function readBuildInfo(cfg) {
-  let buildId = null;
-  let branch = null;
   let version = null;
-  try {
-    const acf = fs.readFileSync(path.join(cfg.installPath, "steamapps", "appmanifest_380870.acf"), "utf8");
-    buildId = (acf.match(/"buildid"\s+"(\d+)"/) || [])[1] || null;
-    branch = (acf.match(/"BetaKey"\s+"([^"]*)"/) || [])[1] || null;
-  } catch {}
   try {
     const fd = fs.openSync(path.join(cfg.dataPath, "server-console.txt"), "r");
     const buf = Buffer.alloc(8192);
@@ -160,34 +149,10 @@ export function readBuildInfo(cfg) {
     // Usually on the first line, but do not depend on it: take the first match near the top.
     version = (buf.toString("utf8", 0, n).match(/\bversion=(\d+\.\d+(?:\.\d+)?)/) || [])[1] || null;
   } catch {}
-  const supported = version === null ? null : version.startsWith("42.");
-  return { buildId, branch, version, supported };
+  return { version, supported: version === null ? null : majorOf(version) === majorOf(MAP.dir) };
 }
 
-// Clears the tile cache when the Steam buildid changes. Returns true if purged.
-export function checkBuildChange(cfg, build) {
-  if (!build.buildId) return false;
-  const stateFile = path.join(cfg.tileCacheDir, "build.json");
-  let previous = null;
-  try {
-    previous = JSON.parse(fs.readFileSync(stateFile, "utf8")).buildId;
-  } catch {}
-  if (previous === build.buildId) return false;
-  const purged = previous !== null;
-  fs.mkdirSync(cfg.tileCacheDir, { recursive: true });
-  if (purged) {
-    for (const entry of fs.readdirSync(cfg.tileCacheDir)) {
-      if (entry !== "build.json") fs.rmSync(path.join(cfg.tileCacheDir, entry), { recursive: true, force: true });
-    }
-    tileIndex = null;
-    negative.clear();
-    mapState = null;
-  }
-  fs.writeFileSync(stateFile, JSON.stringify({ buildId: build.buildId }));
-  return purged;
-}
-
-// ---- curl (Cloudflare challenges Node's TLS stack on descriptor paths) -----
+// ---- curl (Cloudflare can reject Node's TLS stack) -------------------------
 
 const CURL_MARKER = Buffer.from("\n__CURL_HTTP_STATUS__:");
 
@@ -207,95 +172,6 @@ function curlGet(url, timeoutS = 8) {
       },
     );
   });
-}
-
-// ---- map discovery --------------------------------------------------------
-
-// Descriptors: curl first, then Node's own fetch. Which one Cloudflare lets through
-// depends on the network the box is on, so try both before giving up.
-async function getDescriptor(url) {
-  let first = { status: 0 };
-  try {
-    first = await curlGet(url);
-    if (first.status === 200) return first;
-  } catch (e) {
-    first = { status: 0, error: e };
-  }
-  try {
-    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(8000) });
-    if (res.ok) return { status: 200, body: Buffer.from(await res.arrayBuffer()) };
-    return { status: res.status, body: Buffer.alloc(0) };
-  } catch {
-    if (first.error) throw first.error;
-    return first;
-  }
-}
-
-// Returns {map} on success, or {why} naming the HTTP status of each descriptor.
-async function fetchDescriptors(cfg, dir) {
-  const base = `${cfg.tilesRoot}/${dir}/base`;
-  const [dziRes, infoRes] = await Promise.all([getDescriptor(`${base}/layer0.dzi`), getDescriptor(`${base}/map_info.json`)]);
-  if (dziRes.status !== 200 || infoRes.status !== 200) {
-    return { why: `${dir}: layer0.dzi HTTP ${dziRes.status}, map_info.json HTTP ${infoRes.status}` };
-  }
-  const xml = dziRes.body.toString("utf8");
-  const tileSize = Number(xml.match(/TileSize="(\d+)"/)?.[1]);
-  const width = Number(xml.match(/Width="(\d+)"/)?.[1]);
-  const height = Number(xml.match(/Height="(\d+)"/)?.[1]);
-  let info;
-  try {
-    info = JSON.parse(infoRes.body.toString("utf8"));
-  } catch {
-    return { why: `${dir}: map_info.json is not JSON` };
-  }
-  const x0 = Number(info?.x0);
-  const y0 = Number(info?.y0);
-  const sqr = Number(info?.sqr);
-  const skip = Number(info?.skip);
-  if (!tileSize || !width || !height || !Number.isFinite(x0) || !Number.isFinite(y0) || !sqr) {
-    return { why: `${dir}: descriptors missing expected fields` };
-  }
-  return { map: mapFromDescriptors(dir, { tileSize, width, height }, { x0, y0, sqr, scale: 1 << (Number.isFinite(skip) ? skip : 0) }) };
-}
-
-// Candidate build directories, best first: explicit override, the running game
-// version (e.g. 42.21.0), then the known-good fallback.
-export function mapCandidates(cfg, build) {
-  return [...new Set([cfg.mapDir, build?.version, MAP_FALLBACK.dir].filter(Boolean))];
-}
-
-let mapState = null; // {map, source, reason, at}
-let mapInflight = null;
-
-// Tests only: forget the cached map resolution.
-export function _resetMapState() {
-  mapState = null;
-  mapInflight = null;
-}
-
-export async function resolveMap(cfg) {
-  const ttl = mapState?.source === "dynamic" ? MAP_TTL_MS : MAP_RETRY_MS;
-  if (mapState && Date.now() - mapState.at < ttl) return mapState;
-  if (!mapInflight) {
-    mapInflight = (async () => {
-      const build = readBuildInfo(cfg);
-      const reasons = [];
-      for (const dir of mapCandidates(cfg, build)) {
-        try {
-          const r = await fetchDescriptors(cfg, dir);
-          if (r.map) return (mapState = { map: r.map, source: "dynamic", reason: null, at: Date.now() });
-          reasons.push(r.why);
-        } catch (e) {
-          reasons.push(`${dir}: ${e.code === "ENOENT" ? "curl is not installed" : `curl failed (${e.message})`}`);
-          if (e.code === "ENOENT") break;
-        }
-      }
-      return (mapState = { map: MAP_FALLBACK, source: "fallback", reason: reasons.join("; "), at: Date.now() });
-    })().finally(() => {
-      mapInflight = null;
-    });
-  }
-  return mapInflight;
 }
 
 // ---- tile proxy and disk cache -------------------------------------------
@@ -379,8 +255,8 @@ export async function fetchUpstream(url) {
   return { status: 502 };
 }
 
-async function serveTile(cfg, map, level, tile, res) {
-  const rel = `${map.dir}/${level}/${tile}`;
+async function serveTile(cfg, level, tile, res) {
+  const rel = `${MAP.dir}/${level}/${tile}`;
   const expiry = negative.get(rel);
   if (expiry && expiry > Date.now()) {
     res.writeHead(404, { "X-Tile-Cache": "hit", "Cache-Control": "public, max-age=3600" });
@@ -391,7 +267,7 @@ async function serveTile(cfg, map, level, tile, res) {
   if (!body) {
     cache = "miss";
     if (!inflight.has(rel)) {
-      const p = fetchUpstream(`${cfg.tilesRoot}/${map.dir}/base/layer0_files/${level}/${tile}`).finally(() => inflight.delete(rel));
+      const p = fetchUpstream(`${cfg.tilesRoot}/${MAP.dir}/base/layer0_files/${level}/${tile}`).finally(() => inflight.delete(rel));
       inflight.set(rel, p);
     }
     const r = await inflight.get(rel);
@@ -440,16 +316,13 @@ export function createServer(cfg) {
 
     if (p === "/api/players") return json(res, 200, readPlayers(cfg));
     if (p === "/api/meta") {
-      const build = readBuildInfo(cfg);
-      const { map, source, reason } = await resolveMap(cfg);
-      return json(res, 200, { app, serverName: cfg.serverName, refreshSeconds: cfg.refreshSeconds, build, map, mapSource: source, mapNote: reason });
+      return json(res, 200, { app, serverName: cfg.serverName, refreshSeconds: cfg.refreshSeconds, build: readBuildInfo(cfg), map: MAP });
     }
     const tm = p.match(/^\/tiles\/(\d{1,2})\/(\d{1,6}_\d{1,6})\.jpg$/);
     if (tm) {
-      const { map } = await resolveMap(cfg);
       const level = Number(tm[1]);
-      if (level > map.maxLevel) return json(res, 400, { error: "invalid level" });
-      return serveTile(cfg, map, level, `${tm[2]}.jpg`, res);
+      if (level > MAP.maxLevel) return json(res, 400, { error: "invalid level" });
+      return serveTile(cfg, level, `${tm[2]}.jpg`, res);
     }
 
     // Static files, with traversal guard.
@@ -471,16 +344,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.exit(1);
   }
   fs.mkdirSync(cfg.tileCacheDir, { recursive: true });
-  const check = () => {
-    try {
-      if (checkBuildChange(cfg, readBuildInfo(cfg))) console.log("PZ build changed, tile cache cleared");
-    } catch (e) {
-      console.error("build check failed:", e.message);
-    }
-  };
-  check();
-  setInterval(check, 60_000).unref();
-  resolveMap(cfg).then((s) => console.log(`map: ${s.map.dir} (${s.source}${s.reason ? `: ${s.reason}` : ""})`));
   createServer(cfg).listen(cfg.port, cfg.bindAddr, () =>
     console.log(`zmap listening on http://${cfg.bindAddr}:${cfg.port}`),
   );

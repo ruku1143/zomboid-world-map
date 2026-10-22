@@ -4,14 +4,13 @@
 // tiles already on disk are skipped.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig, resolveMap, fetchUpstream, cacheTile, readCachedTile } from "./server.js";
+import { loadConfig, MAP as map, fetchUpstream, cacheTile, readCachedTile } from "./server.js";
 import { tileSpan } from "./public/projection.js";
 
 const CONCURRENCY = 4;
 const RETRIES = 2;
 
 export async function prefetch(cfg, maxLevel, log = console.log) {
-  const { map } = await resolveMap(cfg);
   const top = Math.min(maxLevel, map.maxLevel);
   const totals = { fetched: 0, cached: 0, empty: 0, failed: 0 };
   for (let level = 0; level <= top; level++) {
