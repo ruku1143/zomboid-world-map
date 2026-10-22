@@ -188,6 +188,25 @@ test("readPlayers: an empty list is online-with-nobody, not offline", () => {
   assert.deepEqual(r.players, []);
 });
 
+test("the page links its icons and the server serves them as PNGs", async () => {
+  const { cfg } = setup();
+  const server = createServer(cfg);
+  const base = await listen(server);
+  try {
+    const html = await (await fetch(`${base}/`)).text();
+    assert.match(html, /<link rel="icon"[^>]*href="favicon\.png"/);
+    assert.match(html, /<link rel="apple-touch-icon"[^>]*href="apple-touch-icon\.png"/);
+    for (const f of ["favicon.png", "apple-touch-icon.png"]) {
+      const res = await fetch(`${base}/${f}`);
+      assert.equal(res.status, 200);
+      assert.equal(res.headers.get("content-type"), "image/png");
+      assert.deepEqual([...new Uint8Array(await res.arrayBuffer()).slice(1, 4)], [0x50, 0x4e, 0x47], "a real PNG");
+    }
+  } finally {
+    server.close();
+  }
+});
+
 test("readServerName prefers PublicName from the ini and falls back to SERVER_NAME", () => {
   const { cfg, dataPath } = setup();
   const fallback = readServerName(cfg);
