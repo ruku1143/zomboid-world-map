@@ -95,6 +95,13 @@ Generating tiles from the game files instead is not practical: the map art on th
 ## Update
 `sudo -u zmap git -C /srv/zomboid-map pull && sudo systemctl restart zmap`
 
+The map service reads whatever the mod writes, but the mod itself is a copy on the game server. When a release changes the mod (the safehouse outlines need the 1.2 mod), re-copy it and restart the game server once (check nobody is online first), as in the install step:
+```
+sudo -u zomboid bash -c 'umask 0002; cp /srv/zomboid-map/mod/ZMapPositions/42/media/lua/server/ZMapPositions.lua /srv/zomboid-server/media/lua/server/'
+sudo systemctl restart zomboid
+```
+Without it the map keeps working, just without safehouses.
+
 Run git as the `zmap` user, who owns the checkout. Plain `sudo git pull` runs as root and git refuses with `detected dubious ownership`. (If you cloned as another user, `sudo git config --global --add safe.directory /srv/zomboid-map` also works.)
 
 ## Configuration
@@ -103,6 +110,7 @@ All via environment variables in `/etc/zmap.env`, see [deploy/zmap.env.example](
 ## Using the map
 - Drag to pan, wheel or pinch to zoom, tap a player in the list to centre on them. The bottom corner shows the world coordinate under the cursor.
 - Each online player gets their own marker colour (shown in the player list too). The colour comes from the name, so a player keeps theirs between sessions; if two players online would clash, the later name alphabetically takes the next free colour.
+- Safehouses: each claimed safehouse is outlined in its owner's colour, labelled with the owner when zoomed in, and listed in the panel with its members (click to centre). Use the checkbox in the panel to hide the outlines; the choice is remembered in the browser. Their locations are visible to anyone who can open the map.
 - Update interval: the mod writes positions every 2 s and the page polls every `REFRESH_SECONDS` (default 5 s), so a marker is at most about 7 s behind the game.
 - Share a view: `/?x=10800&y=10000&zoom=14` (`zoom` is the Deep Zoom level, 12.1 to 22; zooming out further is blocked).
 - If the server stops or the mod stops writing for 3 intervals, the map shows nobody online and an offline notice.

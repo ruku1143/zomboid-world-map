@@ -6,10 +6,10 @@ import os from "node:os";
 import path from "node:path";
 import {
   MAP_FALLBACK, mapFromDescriptors, mapCandidates, loadConfig, readPlayers, readBuildInfo,
-  readVersion, checkBuildChange, cacheTile, readCachedTile, createServer, resolveMap, _resetMapState,
+  readVersion, cleanSafehouses, checkBuildChange, cacheTile, readCachedTile, createServer, resolveMap, _resetMapState,
 } from "../server.js";
 import { prefetch } from "../prefetch.js";
-import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, assignColors, PLAYER_COLORS, MIN_ZOOM } from "../public/projection.js";
+import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, assignColors, colorForName, safehouseCorners, PLAYER_COLORS, MIN_ZOOM } from "../public/projection.js";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "zmap-"));
 
@@ -70,6 +70,46 @@ test("assignColors: stable per name, distinct among online players, and falls ba
   const many = assignColors(["a", "b", "c"], ["#111", "#222"]);
   assert.equal(new Set(many.values()).size, 3);
   assert.equal(assignColors(["Ruku", "Ruku"]).size, 1);
+});
+
+test("safehouseCorners is the rectangle as a diamond in dzi pixels", () => {
+  const m = MAP_FALLBACK;
+  const c = safehouseCorners({ x: 100, y: 200, w: 10, h: 20 }, m);
+  assert.deepEqual(c[0], gameToDzi(100, 200, m));
+  assert.deepEqual(c[2], gameToDzi(110, 220, m));
+  // Moving along game x goes right and down, along game y goes left and down.
+  assert.ok(c[1].x > c[0].x && c[1].y > c[0].y);
+  assert.ok(c[3].x < c[0].x && c[3].y > c[0].y);
+  assert.equal(colorForName("Ruku"), colorForName("Ruku"));
+  assert.ok(PLAYER_COLORS.includes(colorForName("Ruku")));
+});
+
+test("cleanSafehouses keeps well-formed entries and drops junk", () => {
+  const good = { owner: "Ruku", title: "Base", x: 1, y: 2, w: 10, h: 12, members: ["Ruku", "Alex", 7] };
+  const out = cleanSafehouses([good, null, { x: 1, y: 2, w: 0, h: 5 }, { x: "1", y: 2, w: 3, h: 3 }, { x: 5, y: 5, w: 3, h: 3 }]);
+  assert.equal(out.length, 2);
+  assert.deepEqual(out[0], { owner: "Ruku", title: "Base", x: 1, y: 2, w: 10, h: 12, members: ["Ruku", "Alex"] });
+  assert.deepEqual(out[1], { owner: "", title: "", x: 5, y: 5, w: 3, h: 3, members: [] });
+  assert.deepEqual(cleanSafehouses(undefined), []);
+  assert.equal(cleanSafehouses(Array.from({ length: 600 }, () => good)).length, 500);
+  assert.equal(cleanSafehouses([{ ...good, owner: "x".repeat(200) }])[0].owner.length, 64);
+});
+
+test("readPlayers returns safehouses, and keeps them when the file goes stale", () => {
+  const { cfg, dataPath } = setup();
+  const file = path.join(dataPath, "Lua", "zmap_players.txt");
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [{ name: "A", x: 1, y: 2, z: 0 }], safehouses: [{ owner: "A", title: "T", x: 3, y: 4, w: 5, h: 6, members: ["A"] }] }));
+  const now = Date.now();
+  const live = readPlayers(cfg, now);
+  assert.equal(live.safehouses.length, 1);
+  assert.equal(live.players.length, 1);
+  const stale = readPlayers(cfg, now + 10 * 60 * 1000);
+  assert.equal(stale.players.length, 0);
+  assert.equal(stale.safehouses.length, 1, "safehouses are persistent, so the last known stay");
+  // An older mod that writes no safehouses still works.
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [] }));
+  assert.deepEqual(readPlayers(cfg).safehouses, []);
+  assert.deepEqual(readPlayers(setup().cfg).safehouses, []);
 });
 
 test("edge tiles cover only their real share of the cell", () => {

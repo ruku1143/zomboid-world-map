@@ -1,4 +1,4 @@
-import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, assignColors, parseView, MIN_ZOOM } from "./projection.js";
+import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, assignColors, colorForName, safehouseCorners, parseView, MIN_ZOOM } from "./projection.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("map");
@@ -11,6 +11,10 @@ const MAX_LOADS = 8;
 let meta = null;
 let players = [];
 let colors = new Map();
+let safehouses = [];
+let showSafehouses = true;
+try { showSafehouses = localStorage.getItem("zmap-safehouses") !== "0"; } catch {}
+const ownerColor = (h) => colors.get(h.owner) || colorForName(h.owner || h.title || "?");
 const cam = { x: 0, y: 0, scale: 0.001 }; // dzi px at screen centre, canvas px per dzi px
 let dirty = true;
 const redraw = () => (dirty = true);
@@ -146,7 +150,43 @@ function draw() {
       if (DEBUG) debugTile(level, c, r, s.x, s.y, span * cam.scale, what || "none");
     }
   }
+  if (showSafehouses) drawSafehouses();
   drawPlayers();
+}
+
+function drawSafehouses() {
+  ctx.font = "600 12px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const h of safehouses) {
+    const pts = safehouseCorners(h, meta.map).map((d) => toScreen(d.x, d.y));
+    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    if (maxX < 0 || maxY < 0 || minX > innerWidth || minY > innerHeight) continue;
+    const color = ownerColor(h);
+    ctx.beginPath();
+    pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+    ctx.closePath();
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.globalAlpha = 0.95;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    // Label only when the outline is big enough to hold it.
+    if (maxX - minX > 70 && (h.owner || h.title)) {
+      const label = h.owner || h.title;
+      const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#12151a";
+      ctx.strokeText(label, cx, cy);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(label, cx, cy);
+    }
+  }
+  ctx.textAlign = "start";
 }
 
 function drawPlayers() {
@@ -265,6 +305,7 @@ function renderPlayers(data) {
     li.addEventListener("click", () => centerOnGame(p.x, p.y));
     return li;
   }));
+  renderSafehouses(data.safehouses || []);
   $("empty").hidden = players.length > 0;
   const note = data.reason === "no-file"
     ? "Positions file not found. Is the ZMapPositions mod loaded?"
@@ -277,6 +318,33 @@ function renderPlayers(data) {
     : `${players.length} online · updated ${ago(data.updatedAt)}`;
   redraw();
 }
+
+function renderSafehouses(list) {
+  safehouses = list;
+  $("safehouses").replaceChildren(...list.map((h) => {
+    const li = document.createElement("li");
+    const name = document.createElement("span");
+    const swatch = document.createElement("i");
+    swatch.className = "swatch";
+    swatch.style.background = ownerColor(h);
+    name.append(swatch, h.owner || h.title || "Safehouse");
+    const sub = document.createElement("small");
+    const others = h.members.filter((m) => m !== h.owner);
+    sub.textContent = others.length ? `+ ${others.join(", ")}` : `${h.w}x${h.h}`;
+    li.title = `${h.title || "Safehouse"} · ${h.w}x${h.h} at ${h.x}, ${h.y}`;
+    li.append(name, sub);
+    li.addEventListener("click", () => centerOnGame(h.x + h.w / 2, h.y + h.h / 2));
+    return li;
+  }));
+  $("shHead").hidden = list.length === 0;
+}
+
+$("shShow").checked = showSafehouses;
+$("shShow").addEventListener("change", (e) => {
+  showSafehouses = e.target.checked;
+  try { localStorage.setItem("zmap-safehouses", showSafehouses ? "1" : "0"); } catch {}
+  redraw();
+});
 
 async function poll() {
   if (!document.hidden) {
