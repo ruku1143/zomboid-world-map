@@ -9,7 +9,7 @@ import {
   readVersion, checkBuildChange, cacheTile, readCachedTile, createServer, resolveMap, _resetMapState,
 } from "../server.js";
 import { prefetch } from "../prefetch.js";
-import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, MIN_ZOOM } from "../public/projection.js";
+import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, assignColors, PLAYER_COLORS, MIN_ZOOM } from "../public/projection.js";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "zmap-"));
 
@@ -53,6 +53,23 @@ test("readVersion reads package.json and the commit from .git, loose or packed",
   fs.writeFileSync(path.join(root, ".git", "HEAD"), `${sha}\n`); // detached
   assert.equal(readVersion(root).commit, "0123456");
   assert.deepEqual(readVersion(tmp()), { version: null, commit: null });
+});
+
+test("assignColors: stable per name, distinct among online players, and falls back past the palette", () => {
+  const names = ["Ruku", "Alex", "Sam", "Jo", "Mia", "Zed"];
+  const all = assignColors(names);
+  assert.equal(new Set(all.values()).size, names.length, "no two online players share a colour");
+  // A player keeps their colour regardless of who else is online, as long as nobody collides with it.
+  assert.equal(assignColors(["Ruku"]).get("Ruku"), assignColors(["Ruku"]).get("Ruku"));
+  assert.deepEqual([...assignColors(["b", "a"]).entries()], [...assignColors(["a", "b"]).entries()], "input order does not matter");
+  assert.ok(PLAYER_COLORS.includes(assignColors(["Ruku"]).get("Ruku")));
+  // Two names forced onto the same preferred slot get different colours.
+  const same = assignColors(["a", "b"], ["#111", "#222"]);
+  assert.notEqual(same.get("a"), same.get("b"));
+  // More players than colours: still one distinct colour each.
+  const many = assignColors(["a", "b", "c"], ["#111", "#222"]);
+  assert.equal(new Set(many.values()).size, 3);
+  assert.equal(assignColors(["Ruku", "Ruku"]).size, 1);
 });
 
 test("edge tiles cover only their real share of the cell", () => {

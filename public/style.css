@@ -13,6 +13,7 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
 #panel.hidden { display: none; }
 #players { list-style: none; margin: 0; padding: 0; }
 #players li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; cursor: pointer; border-bottom: 1px solid #ffffff14; }
+#players .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; border: 1.5px solid var(--bg, #12151a); box-shadow: 0 0 0 1px #ffffff40; }
 #players small { color: var(--muted); }
 #empty { color: var(--muted); margin: 8px 0; }
 #empty[hidden] { display: none; }
