@@ -22,8 +22,11 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
 #banner span { flex: 1; }
 #banner button { padding: 0 8px; font-size: 18px; line-height: 1.2; border: 0; color: inherit; }
 #coords { position: fixed; left: 0; bottom: 0; padding: 4px 12px; padding-bottom: max(4px, env(safe-area-inset-bottom)); background: var(--panel); color: var(--muted); font-variant-numeric: tabular-nums; border-radius: 0 8px 0 0; }
+#version { position: fixed; right: 0; bottom: 0; padding: 4px 12px; padding-bottom: max(4px, env(safe-area-inset-bottom)); background: var(--panel); color: var(--muted); font-size: 12px; border-radius: 8px 0 0 0; pointer-events: none; }
+#version:empty { display: none; }
 @media (max-width: 600px) {
   #panel { width: 100%; top: auto; bottom: 0; max-height: 40%; border-radius: 8px 8px 0 0; }
   #banner { right: 16px; }
   #coords { bottom: auto; top: 48px; border-radius: 0 0 8px 0; }
+  #version { display: none; }
 }
