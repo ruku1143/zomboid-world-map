@@ -57,3 +57,33 @@ export function parseView(search, m) {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
   return { x, y, zoom: Number.isFinite(zoom) ? Math.min(m.maxLevel, Math.max(MIN_ZOOM, zoom)) : 14 };
 }
+
+// Marker colours, picked to stand out on the olive map and from each other.
+export const PLAYER_COLORS = ["#f2b134", "#ff4d4d", "#36d1ff", "#b388ff", "#ff7eb6", "#ffffff", "#4d7cff", "#ff7a1a", "#e6ff4d", "#2ee6c5"];
+
+const hashName = (name) => {
+  let h = 2166136261; // FNV-1a
+  for (let i = 0; i < name.length; i++) h = Math.imul(h ^ name.charCodeAt(i), 16777619) >>> 0;
+  return h;
+};
+
+// Name -> colour for the players online. Each name prefers a colour derived from the name, so a
+// player keeps their colour between sessions; when two online players want the same one, the
+// later name (alphabetically, so every viewer agrees) takes the next free colour.
+export function assignColors(names, palette = PLAYER_COLORS) {
+  const out = new Map();
+  const used = new Set();
+  for (const name of [...new Set(names)].sort()) {
+    const want = hashName(name) % palette.length;
+    let pick = want;
+    for (let i = 0; i < palette.length && used.has(pick); i++) pick = (want + i + 1) % palette.length;
+    if (used.has(pick)) {
+      // More players than colours: fall back to evenly spaced hues.
+      out.set(name, `hsl(${(out.size * 137.5) % 360} 85% 60%)`);
+      continue;
+    }
+    used.add(pick);
+    out.set(name, palette[pick]);
+  }
+  return out;
+}

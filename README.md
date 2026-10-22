@@ -102,6 +102,8 @@ All via environment variables in `/etc/zmap.env`, see [deploy/zmap.env.example](
 
 ## Using the map
 - Drag to pan, wheel or pinch to zoom, tap a player in the list to centre on them. The bottom corner shows the world coordinate under the cursor.
+- Each online player gets their own marker colour (shown in the player list too). The colour comes from the name, so a player keeps theirs between sessions; if two players online would clash, the later name alphabetically takes the next free colour.
+- Update interval: the mod writes positions every 2 s and the page polls every `REFRESH_SECONDS` (default 5 s), so a marker is at most about 7 s behind the game.
 - Share a view: `/?x=10800&y=10000&zoom=14` (`zoom` is the Deep Zoom level, 12.1 to 22; zooming out further is blocked).
 - If the server stops or the mod stops writing for 3 intervals, the map shows nobody online and an offline notice.
 

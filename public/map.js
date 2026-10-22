@@ -1,4 +1,4 @@
-import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, parseView, MIN_ZOOM } from "./projection.js";
+import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, assignColors, parseView, MIN_ZOOM } from "./projection.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("map");
@@ -10,6 +10,7 @@ const MAX_LOADS = 8;
 
 let meta = null;
 let players = [];
+let colors = new Map();
 const cam = { x: 0, y: 0, scale: 0.001 }; // dzi px at screen centre, canvas px per dzi px
 let dirty = true;
 const redraw = () => (dirty = true);
@@ -157,7 +158,7 @@ function drawPlayers() {
     if (s.x < -100 || s.y < -20 || s.x > innerWidth + 100 || s.y > innerHeight + 20) continue;
     ctx.beginPath();
     ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
-    ctx.fillStyle = "#f2b134";
+    ctx.fillStyle = colors.get(p.name) || "#f2b134";
     ctx.fill();
     ctx.lineWidth = 2;
     ctx.strokeStyle = "#12151a";
@@ -249,11 +250,15 @@ function ago(ms) {
 
 function renderPlayers(data) {
   players = data.players;
+  colors = assignColors(players.map((p) => p.name));
   const list = $("players");
   list.replaceChildren(...players.map((p) => {
     const li = document.createElement("li");
     const name = document.createElement("span");
-    name.textContent = p.name;
+    const swatch = document.createElement("i");
+    swatch.className = "swatch";
+    swatch.style.background = colors.get(p.name);
+    name.append(swatch, p.name);
     const sub = document.createElement("small");
     sub.textContent = `${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
     li.append(name, sub);
