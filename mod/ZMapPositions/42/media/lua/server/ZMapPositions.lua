@@ -66,6 +66,13 @@ local function readGameTime()
         gt:getYear(), gt:getMonth() + 1, day, gt:getHour(), gt:getMinutes())
 end
 
+-- Overall health 0-100 (BodyDamage), or "null" if it cannot be read for this player.
+local function readHealth(p)
+    local ok, hp = pcall(function() return p:getBodyDamage():getHealth() end)
+    if not ok or type(hp) ~= "number" then return "null" end
+    return tostring(math.max(0, math.min(100, math.floor(hp))))
+end
+
 local function writePositions()
     local players = getOnlinePlayers()
     local parts = {}
@@ -74,9 +81,9 @@ local function writePositions()
             local p = players:get(i)
             if p and not p:isDead() and not isHidden(p) then
                 table.insert(parts, string.format(
-                    '{"name":%s,"x":%d,"y":%d,"z":%d}',
+                    '{"name":%s,"x":%d,"y":%d,"z":%d,"hp":%s}',
                     jsonString(p:getUsername()),
-                    math.floor(p:getX()), math.floor(p:getY()), math.floor(p:getZ())))
+                    math.floor(p:getX()), math.floor(p:getY()), math.floor(p:getZ()), readHealth(p)))
             end
         end
     end

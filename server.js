@@ -148,7 +148,7 @@ export function readPlayers(cfg, now = Date.now()) {
     gameTime = cleanGameTime(data.time);
     players = (Array.isArray(data.players) ? data.players : [])
       .filter((p) => p && typeof p.name === "string" && Number.isFinite(p.x) && Number.isFinite(p.y))
-      .map((p) => ({ name: p.name, x: p.x, y: p.y, z: Number.isFinite(p.z) ? p.z : 0 }));
+      .map((p) => ({ name: p.name, x: p.x, y: p.y, z: Number.isFinite(p.z) ? p.z : 0, hp: Number.isFinite(p.hp) ? Math.max(0, Math.min(100, Math.round(p.hp))) : null }));
   } catch {
     // Mid-write read; the client keeps its last good state and retries.
     return { ...base, players: [], safehouses: [], gameTime: null, error: "unreadable" };
