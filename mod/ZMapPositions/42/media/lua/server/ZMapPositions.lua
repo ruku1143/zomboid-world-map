@@ -11,6 +11,7 @@
 -- server after changing them.
 local SHOW_HEALTH = true            -- each player's health bar and % on the map
 local SHOW_GAME_TIME = true         -- the in-game date and time in the top bar
+local SHOW_IN_VEHICLE = true        -- a car icon next to players who are driving or riding
 local HIDE_INVISIBLE_ADMINS = true  -- leave invisible / ghost-mode admins off the map
 
 local INTERVAL_MS = 2000
@@ -74,6 +75,14 @@ local function readGameTime()
         gt:getYear(), gt:getMonth() + 1, day, gt:getHour(), gt:getMinutes())
 end
 
+-- "true" / "false" for whether the player is in a vehicle, or "null" if not shared or unreadable.
+local function readInVehicle(p)
+    if not SHOW_IN_VEHICLE then return "null" end
+    local ok, v = pcall(function() return p:getVehicle() end)
+    if not ok then return "null" end
+    return v and "true" or "false"
+end
+
 -- Overall health 0-100 (BodyDamage), or "null" if it cannot be read for this player.
 local function readHealth(p)
     if not SHOW_HEALTH then return "null" end
@@ -90,9 +99,9 @@ local function writePositions()
             local p = players:get(i)
             if p and not p:isDead() and not isHidden(p) then
                 table.insert(parts, string.format(
-                    '{"name":%s,"x":%d,"y":%d,"z":%d,"hp":%s}',
+                    '{"name":%s,"x":%d,"y":%d,"z":%d,"hp":%s,"car":%s}',
                     jsonString(p:getUsername()),
-                    math.floor(p:getX()), math.floor(p:getY()), math.floor(p:getZ()), readHealth(p)))
+                    math.floor(p:getX()), math.floor(p:getY()), math.floor(p:getZ()), readHealth(p), readInVehicle(p)))
             end
         end
     end

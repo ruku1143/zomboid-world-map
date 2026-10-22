@@ -204,9 +204,10 @@ function drawPlayers() {
     }
     ctx.lineWidth = 3;
     ctx.strokeStyle = "#12151a";
-    ctx.strokeText(p.name, s.x + 14, s.y);
+    const label = p.car ? `${p.name} 🚗` : p.name;
+    ctx.strokeText(label, s.x + 14, s.y);
     ctx.fillStyle = "#e6e9ee"; // --text
-    ctx.fillText(p.name, s.x + 14, s.y);
+    ctx.fillText(label, s.x + 14, s.y);
   }
 }
 
@@ -328,7 +329,7 @@ function renderPlayers(data) {
     const swatch = document.createElement("i");
     swatch.className = "swatch";
     swatch.style.background = colors.get(p.name);
-    name.append(swatch, p.name);
+    name.append(swatch, p.car ? `${p.name} 🚗` : p.name);
     const sub = document.createElement("small");
     sub.textContent = `${p.hp == null ? "" : `${p.hp}% HP · `}${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
     li.append(name, sub);
