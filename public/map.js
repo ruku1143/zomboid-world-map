@@ -293,6 +293,9 @@ function ago(ms) {
   return s < 60 ? `${s}s ago` : `${Math.round(s / 60)}m ago`;
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const formatGameTime = (t) => `${MONTHS[t.mo - 1]} ${t.d}, ${t.y} · ${String(t.h).padStart(2, "0")}:${String(t.mi).padStart(2, "0")}`;
+
 function renderPlayers(data) {
   const prev = new Map(players.map((p) => [p.name, p]));
   players = data.players;
@@ -317,6 +320,7 @@ function renderPlayers(data) {
     return li;
   }));
   renderSafehouses(data.safehouses || []);
+  $("clock").textContent = data.gameTime ? formatGameTime(data.gameTime) : "";
   $("empty").hidden = players.length > 0;
   const note = data.reason === "no-file"
     ? "Positions file not found. Is the ZMapPositions mod loaded?"

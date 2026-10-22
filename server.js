@@ -46,6 +46,7 @@ export function loadConfig(env = process.env) {
   const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
   return {
     serverName: env.SERVER_NAME || "Project Zomboid",
+    serverIni: env.SERVER_INI || "pzserver", // <data>/Server/<name>.ini, where PublicName lives
     dataPath: env.PZ_DATA_PATH || "",
     refreshSeconds: num(env.REFRESH_SECONDS, 5),
     bindAddr: env.BIND_ADDR || "127.0.0.1",
@@ -84,6 +85,29 @@ export function readVersion(root = HERE) {
   return { version, commit };
 }
 
+// ---- server name ----------------------------------------------------------
+
+// PublicName from the game's own ini, so the page title follows the server's settings.
+// Falls back to SERVER_NAME when the file is unreadable or the name is empty.
+export function readServerName(cfg) {
+  try {
+    const ini = fs.readFileSync(path.join(cfg.dataPath, "Server", `${cfg.serverIni}.ini`), "utf8");
+    const name = (ini.match(/^PublicName=(.*)$/m) || [])[1]?.trim();
+    if (name) return name.slice(0, 100);
+  } catch {}
+  return cfg.serverName;
+}
+
+// ---- in-game time: from the mod's file, sanitised like the rest ----------
+
+export function cleanGameTime(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const { y, mo, d, h, mi } = raw;
+  if (![y, mo, d, h, mi].every(Number.isInteger)) return null;
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h < 0 || h > 23 || mi < 0 || mi > 59) return null;
+  return { y, mo, d, h, mi };
+}
+
 // ---- safehouses: sanitised from the mod's file, which is trusted but may be mid-write or odd ----
 const SAFEHOUSE_MAX = 500;
 const clip = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
@@ -109,7 +133,7 @@ export function readPlayers(cfg, now = Date.now()) {
   try {
     stat = fs.statSync(file);
   } catch {
-    return { available: false, stale: true, reason: "no-file", updatedAt: null, players: [], safehouses: [] };
+    return { available: false, stale: true, reason: "no-file", updatedAt: null, players: [], safehouses: [], gameTime: null };
   }
   const ageMs = now - stat.mtimeMs;
   const staleAfterMs = Math.max(cfg.refreshSeconds, MOD_INTERVAL_SECONDS) * 3000;
@@ -117,19 +141,21 @@ export function readPlayers(cfg, now = Date.now()) {
   const base = { available: true, stale, reason: stale ? "stale" : null, ageSeconds: Math.round(ageMs / 1000), updatedAt: stat.mtimeMs };
   let players = [];
   let safehouses = [];
+  let gameTime = null;
   try {
     const data = JSON.parse(fs.readFileSync(file, "utf8"));
     safehouses = cleanSafehouses(data.safehouses);
+    gameTime = cleanGameTime(data.time);
     players = (Array.isArray(data.players) ? data.players : [])
       .filter((p) => p && typeof p.name === "string" && Number.isFinite(p.x) && Number.isFinite(p.y))
       .map((p) => ({ name: p.name, x: p.x, y: p.y, z: Number.isFinite(p.z) ? p.z : 0 }));
   } catch {
     // Mid-write read; the client keeps its last good state and retries.
-    return { ...base, players: [], safehouses: [], error: "unreadable" };
+    return { ...base, players: [], safehouses: [], gameTime: null, error: "unreadable" };
   }
-  // A stale file means the server (or mod) stopped: nobody is shown as online. Safehouses are
-  // persistent, so the last known ones stay on the map.
-  return { ...base, players: stale ? [] : players, safehouses };
+  // A stale file means the server (or mod) stopped: nobody is shown as online and the clock is
+  // hidden (it would be frozen). Safehouses are persistent, so the last known ones stay on the map.
+  return { ...base, players: stale ? [] : players, safehouses, gameTime: stale ? null : gameTime };
 }
 
 // ---- game version ---------------------------------------------------------
@@ -316,7 +342,7 @@ export function createServer(cfg) {
 
     if (p === "/api/players") return json(res, 200, readPlayers(cfg));
     if (p === "/api/meta") {
-      return json(res, 200, { app, serverName: cfg.serverName, refreshSeconds: cfg.refreshSeconds, build: readBuildInfo(cfg), map: MAP });
+      return json(res, 200, { app, serverName: readServerName(cfg), refreshSeconds: cfg.refreshSeconds, build: readBuildInfo(cfg), map: MAP });
     }
     const tm = p.match(/^\/tiles\/(\d{1,2})\/(\d{1,6}_\d{1,6})\.jpg$/);
     if (tm) {

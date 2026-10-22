@@ -8,6 +8,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 #map.drag { cursor: grabbing; }
 #bar { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: 12px; align-items: center; padding: 8px 16px; padding-top: max(8px, env(safe-area-inset-top)); background: var(--panel); }
 #status { color: var(--muted); flex: 1; font-size: 13px; }
+#clock { color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#clock:empty { display: none; }
 button { background: transparent; color: var(--text); border: 1px solid var(--muted); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
 #panel { position: fixed; top: 48px; right: 0; width: 260px; max-height: calc(100% - 100px); overflow: auto; background: var(--panel); padding: 8px 16px; border-radius: 0 0 0 8px; }
 #panel.hidden { display: none; }
