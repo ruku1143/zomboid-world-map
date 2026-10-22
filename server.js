@@ -59,6 +59,34 @@ export function loadConfig(env = process.env) {
   };
 }
 
+// ---- version --------------------------------------------------------------
+
+// package.json version plus the checked-out commit, read straight from .git so it works
+// without the git binary and when git would refuse the repo ("dubious ownership").
+export function readVersion(root = HERE) {
+  let version = null;
+  let commit = null;
+  try {
+    version = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version || null;
+  } catch {}
+  try {
+    const gitDir = path.join(root, ".git");
+    const head = fs.readFileSync(path.join(gitDir, "HEAD"), "utf8").trim();
+    let sha = head;
+    if (head.startsWith("ref: ")) {
+      const ref = head.slice(5);
+      try {
+        sha = fs.readFileSync(path.join(gitDir, ref), "utf8").trim();
+      } catch {
+        const packed = fs.readFileSync(path.join(gitDir, "packed-refs"), "utf8");
+        sha = packed.split("\n").find((l) => l.endsWith(` ${ref}`))?.split(" ")[0] || "";
+      }
+    }
+    if (/^[0-9a-f]{40}$/.test(sha)) commit = sha.slice(0, 7);
+  } catch {}
+  return { version, commit };
+}
+
 // ---- positions ------------------------------------------------------------
 
 export function readPlayers(cfg, now = Date.now()) {
@@ -382,6 +410,7 @@ function json(res, status, body, extra = {}) {
 
 export function createServer(cfg) {
   const publicDir = path.join(HERE, "public");
+  const app = readVersion(); // fixed for the life of the process, like the code it describes
   return http.createServer(async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
@@ -393,7 +422,7 @@ export function createServer(cfg) {
     if (p === "/api/meta") {
       const build = readBuildInfo(cfg);
       const { map, source, reason } = await resolveMap(cfg);
-      return json(res, 200, { serverName: cfg.serverName, refreshSeconds: cfg.refreshSeconds, build, map, mapSource: source, mapNote: reason });
+      return json(res, 200, { app, serverName: cfg.serverName, refreshSeconds: cfg.refreshSeconds, build, map, mapSource: source, mapNote: reason });
     }
     const tm = p.match(/^\/tiles\/(\d{1,2})\/(\d{1,6}_\d{1,6})\.jpg$/);
     if (tm) {

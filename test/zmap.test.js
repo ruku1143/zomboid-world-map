@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   MAP_FALLBACK, mapFromDescriptors, mapCandidates, loadConfig, readPlayers, readBuildInfo,
-  checkBuildChange, cacheTile, readCachedTile, createServer, resolveMap, _resetMapState,
+  readVersion, checkBuildChange, cacheTile, readCachedTile, createServer, resolveMap, _resetMapState,
 } from "../server.js";
 import { prefetch } from "../prefetch.js";
 import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, MIN_ZOOM } from "../public/projection.js";
@@ -33,6 +33,26 @@ test("projection round-trips and matches the 42.20.0 origin", () => {
   }
   assert.deepEqual(gameToDzi(0, 0, m), { x: 1040384, y: -139296 });
   assert.deepEqual(gameToDzi(1, 0, m), { x: 1040384 + 64, y: -139296 + 32 });
+});
+
+test("readVersion reads package.json and the commit from .git, loose or packed", () => {
+  const root = tmp();
+  fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ version: "9.8.7" }));
+  assert.deepEqual(readVersion(root), { version: "9.8.7", commit: null });
+
+  const sha = "0123456789abcdef0123456789abcdef01234567";
+  fs.mkdirSync(path.join(root, ".git", "refs", "heads"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".git", "HEAD"), "ref: refs/heads/main\n");
+  fs.writeFileSync(path.join(root, ".git", "refs", "heads", "main"), `${sha}\n`);
+  assert.deepEqual(readVersion(root), { version: "9.8.7", commit: "0123456" });
+
+  fs.rmSync(path.join(root, ".git", "refs"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".git", "packed-refs"), `# pack-refs\n${sha} refs/heads/main\n`);
+  assert.equal(readVersion(root).commit, "0123456");
+
+  fs.writeFileSync(path.join(root, ".git", "HEAD"), `${sha}\n`); // detached
+  assert.equal(readVersion(root).commit, "0123456");
+  assert.deepEqual(readVersion(tmp()), { version: null, commit: null });
 });
 
 test("edge tiles cover only their real share of the cell", () => {
@@ -201,6 +221,7 @@ test("resolveMap reads descriptors for the running version; tiles 404 stay empty
     const meta = await (await fetch(`${base}/api/meta`)).json();
     assert.equal(meta.mapSource, "dynamic");
     assert.equal(meta.map.dir, "42.21.0");
+    assert.equal(meta.app.version, readVersion().version);
     assert.equal(meta.map.tileSize, 2048);
     assert.equal(meta.map.isoX0, 1040384);
     assert.equal(meta.build.supported, true);

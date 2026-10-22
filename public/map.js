@@ -306,6 +306,7 @@ async function init() {
   minScale = scaleForZoom(MIN_ZOOM, meta.map);
   tileVersion = encodeURIComponent(`${meta.map.dir}-${meta.map.tileSize}-${meta.build.buildId ?? ""}`);
   document.title = `${meta.serverName} Map`;
+  $("version").textContent = ["v" + meta.app?.version, meta.app?.commit].filter((x) => x && x !== "vundefined" && x !== "vnull").join(" · ");
   $("title").textContent = meta.serverName;
   if (meta.build.supported === false) banner(`Game version ${meta.build.version} is not Build 42. The map shown may not match this world.`);
   else if (meta.mapSource === "fallback" && !bannerDismissed()) banner(`Showing the ${meta.map.dir} map. The tile host did not answer for the running version (${meta.mapNote}), so the built-in ${meta.map.dir} layout is used. This is fine unless the game map changed in a newer build.`, "info");
