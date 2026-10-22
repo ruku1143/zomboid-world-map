@@ -187,6 +187,14 @@ function drawPlayers() {
     ctx.lineWidth = 2;
     ctx.strokeStyle = "#12151a";
     ctx.stroke();
+    if (p.hp !== null && p.hp !== undefined) {
+      // Small health bar under the dot: green to red.
+      const w = 22, x = s.x - w / 2, y = s.y + 11;
+      ctx.fillStyle = "#12151a";
+      ctx.fillRect(x - 1, y - 1, w + 2, 6);
+      ctx.fillStyle = `hsl(${Math.round(p.hp * 1.2)}, 75%, 50%)`;
+      ctx.fillRect(x, y, (w * p.hp) / 100, 4);
+    }
     ctx.lineWidth = 3;
     ctx.strokeText(p.name, s.x + 12, s.y);
     ctx.fillStyle = "#fff";
@@ -293,6 +301,9 @@ function ago(ms) {
   return s < 60 ? `${s}s ago` : `${Math.round(s / 60)}m ago`;
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const formatGameTime = (t) => `${MONTHS[t.mo - 1]} ${t.d}, ${t.y} · ${String(t.h).padStart(2, "0")}:${String(t.mi).padStart(2, "0")}`;
+
 function renderPlayers(data) {
   const prev = new Map(players.map((p) => [p.name, p]));
   players = data.players;
@@ -311,12 +322,13 @@ function renderPlayers(data) {
     swatch.style.background = colors.get(p.name);
     name.append(swatch, p.name);
     const sub = document.createElement("small");
-    sub.textContent = `${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
+    sub.textContent = `${p.hp == null ? "" : `${p.hp}% HP · `}${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
     li.append(name, sub);
     li.addEventListener("click", () => centerOnGame(p.x, p.y));
     return li;
   }));
   renderSafehouses(data.safehouses || []);
+  $("clock").textContent = data.gameTime ? formatGameTime(data.gameTime) : "";
   $("empty").hidden = players.length > 0;
   const note = data.reason === "no-file"
     ? "Positions file not found. Is the ZMapPositions mod loaded?"

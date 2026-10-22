@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   MAP, mapFromDescriptors, loadConfig, readPlayers, readBuildInfo,
-  readVersion, cleanSafehouses, cacheTile, readCachedTile, createServer,
+  readVersion, cleanSafehouses, readServerName, cleanGameTime, cacheTile, readCachedTile, createServer,
 } from "../server.js";
 import { prefetch } from "../prefetch.js";
 import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, assignColors, colorForName, safehouseCorners, PLAYER_COLORS, MIN_ZOOM } from "../public/projection.js";
@@ -166,7 +166,9 @@ test("readPlayers: .txt file, fresh, stale, missing and half-written", () => {
   const fresh = readPlayers(cfg);
   assert.equal(fresh.stale, false);
   assert.equal(fresh.reason, null);
-  assert.deepEqual(fresh.players, [{ name: "Bob", x: 10, y: 20, z: 0 }]);
+  assert.deepEqual(fresh.players, [{ name: "Bob", x: 10, y: 20, z: 0, hp: null }]);
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [{ name: "A", x: 1, y: 2, hp: 87 }, { name: "B", x: 1, y: 2, hp: 250 }, { name: "C", x: 1, y: 2, hp: "x" }] }));
+  assert.deepEqual(readPlayers(cfg).players.map((p) => p.hp), [87, 100, null], "health is clamped to 0-100, junk becomes null");
   const later = readPlayers(cfg, Date.now() + 60_000);
   assert.equal(later.stale, true);
   assert.equal(later.reason, "stale");
@@ -182,6 +184,30 @@ test("readPlayers: an empty list is online-with-nobody, not offline", () => {
   const r = readPlayers(cfg);
   assert.equal(r.stale, false);
   assert.deepEqual(r.players, []);
+});
+
+test("readServerName prefers PublicName from the ini and falls back to SERVER_NAME", () => {
+  const { cfg, dataPath } = setup();
+  const fallback = readServerName(cfg);
+  assert.equal(fallback, cfg.serverName, "no ini: the configured name");
+  fs.mkdirSync(path.join(dataPath, "Server"), { recursive: true });
+  const ini = path.join(dataPath, "Server", `${cfg.serverIni}.ini`);
+  fs.writeFileSync(ini, "RCONPassword=secret\r\nPublicName=My Cool Server \r\nPublicDescription=x\r\n");
+  assert.equal(readServerName(cfg), "My Cool Server");
+  fs.writeFileSync(ini, "PublicName=\n");
+  assert.equal(readServerName(cfg), cfg.serverName, "empty name: the configured name");
+});
+
+test("readPlayers returns a sanitised game time, hidden when the file is stale", () => {
+  const { cfg, dataPath } = setup();
+  const file = path.join(dataPath, "Lua", "zmap_players.txt");
+  fs.writeFileSync(file, JSON.stringify({ t: 1, time: { y: 1993, mo: 7, d: 9, h: 14, mi: 5 }, players: [] }));
+  assert.deepEqual(readPlayers(cfg).gameTime, { y: 1993, mo: 7, d: 9, h: 14, mi: 5 });
+  assert.equal(readPlayers(cfg, Date.now() + 60_000).gameTime, null);
+  assert.equal(cleanGameTime({ y: 1993, mo: 13, d: 9, h: 14, mi: 5 }), null);
+  assert.equal(cleanGameTime({ y: "1993", mo: 7, d: 9, h: 14, mi: 5 }), null);
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [] }));
+  assert.equal(readPlayers(cfg).gameTime, null, "an older mod writes no time");
 });
 
 test("readBuildInfo reads the console version and compares only the major build with the map", () => {

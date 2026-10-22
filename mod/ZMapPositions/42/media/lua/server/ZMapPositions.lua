@@ -1,5 +1,5 @@
--- ZMapPositions (Build 42, server side): writes living, connected players and the
--- server's safehouses to <Zomboid>/Lua/zmap_players.txt every INTERVAL_MS. Write-only:
+-- ZMapPositions (Build 42, server side): writes living, connected players, the
+-- server's safehouses and the in-game time to <Zomboid>/Lua/zmap_players.txt every INTERVAL_MS. Write-only:
 -- reads no commands and changes nothing in the game. Players that disconnect or die
 -- are simply absent from the next write, as are invisible/ghost-mode admins.
 --
@@ -12,6 +12,7 @@ local FILE_NAME = "zmap_players.txt"
 local lastWrite = 0
 local lastError = nil
 local lastShError = nil
+local lastTimeError = nil
 
 local function nowMs()
     if getTimestampMs then return getTimestampMs() end
@@ -56,6 +57,22 @@ local function isHidden(p)
     return false
 end
 
+-- In-game date and time as JSON (month and day 1-based), or "null" if the clock is unavailable.
+local function readGameTime()
+    local gt = getGameTime and getGameTime()
+    if not gt then return "null" end
+    local day = gt.getDayPlusOne and gt:getDayPlusOne() or (gt:getDay() + 1)
+    return string.format('{"y":%d,"mo":%d,"d":%d,"h":%d,"mi":%d}',
+        gt:getYear(), gt:getMonth() + 1, day, gt:getHour(), gt:getMinutes())
+end
+
+-- Overall health 0-100 (BodyDamage), or "null" if it cannot be read for this player.
+local function readHealth(p)
+    local ok, hp = pcall(function() return p:getBodyDamage():getHealth() end)
+    if not ok or type(hp) ~= "number" then return "null" end
+    return tostring(math.max(0, math.min(100, math.floor(hp))))
+end
+
 local function writePositions()
     local players = getOnlinePlayers()
     local parts = {}
@@ -64,9 +81,9 @@ local function writePositions()
             local p = players:get(i)
             if p and not p:isDead() and not isHidden(p) then
                 table.insert(parts, string.format(
-                    '{"name":%s,"x":%d,"y":%d,"z":%d}',
+                    '{"name":%s,"x":%d,"y":%d,"z":%d,"hp":%s}',
                     jsonString(p:getUsername()),
-                    math.floor(p:getX()), math.floor(p:getY()), math.floor(p:getZ())))
+                    math.floor(p:getX()), math.floor(p:getY()), math.floor(p:getZ()), readHealth(p)))
             end
         end
     end
@@ -79,10 +96,19 @@ local function writePositions()
         end
         safehouses = {}
     end
+    -- Likewise, a clock problem must not stop positions.
+    local okT, gameTime = pcall(readGameTime)
+    if not okT then
+        if tostring(gameTime) ~= lastTimeError then
+            lastTimeError = tostring(gameTime)
+            print("[ZMapPositions] game time unavailable: " .. lastTimeError)
+        end
+        gameTime = "null"
+    end
     local writer = getFileWriter(FILE_NAME, true, false)
     if not writer then error("getFileWriter returned nil for " .. FILE_NAME) end
-    writer:write(string.format('{"t":%d,"players":[%s],"safehouses":[%s]}',
-        math.floor(nowMs() / 1000), table.concat(parts, ","), table.concat(safehouses, ",")))
+    writer:write(string.format('{"t":%d,"time":%s,"players":[%s],"safehouses":[%s]}',
+        math.floor(nowMs() / 1000), gameTime, table.concat(parts, ","), table.concat(safehouses, ",")))
     writer:close()
 end
 
