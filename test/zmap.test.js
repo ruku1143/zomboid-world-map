@@ -188,6 +188,20 @@ test("readPlayers: an empty list is online-with-nobody, not offline", () => {
   assert.deepEqual(r.players, []);
 });
 
+test("the page links a favicon and the server serves it as an SVG", async () => {
+  const { cfg } = setup();
+  const server = createServer(cfg);
+  const base = await listen(server);
+  try {
+    assert.match(await (await fetch(`${base}/`)).text(), /<link rel="icon"[^>]*href="favicon\.svg"/);
+    const res = await fetch(`${base}/favicon.svg`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("content-type"), "image/svg+xml");
+  } finally {
+    server.close();
+  }
+});
+
 test("readServerName prefers PublicName from the ini and falls back to SERVER_NAME", () => {
   const { cfg, dataPath } = setup();
   const fallback = readServerName(cfg);
