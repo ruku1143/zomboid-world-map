@@ -7,6 +7,12 @@
 -- .json is rejected and returns nil) and Lua cannot create folders, so the JSON
 -- document goes straight into the Lua/ folder with a .txt name.
 
+-- Options: set to false to stop sharing that information with the map. Restart the game
+-- server after changing them.
+local SHOW_HEALTH = true            -- each player's health bar and % on the map
+local SHOW_GAME_TIME = true         -- the in-game date and time in the top bar
+local HIDE_INVISIBLE_ADMINS = true  -- leave invisible / ghost-mode admins off the map
+
 local INTERVAL_MS = 2000
 local FILE_NAME = "zmap_players.txt"
 local lastWrite = 0
@@ -52,6 +58,7 @@ end
 -- Admins using /invisible (or ghost mode) must not show up on the map. Each check is
 -- guarded because not every build exposes both methods.
 local function isHidden(p)
+    if not HIDE_INVISIBLE_ADMINS then return false end
     if p.isInvisible and p:isInvisible() then return true end
     if p.isGhostMode and p:isGhostMode() then return true end
     return false
@@ -59,6 +66,7 @@ end
 
 -- In-game date and time as JSON (month and day 1-based), or "null" if the clock is unavailable.
 local function readGameTime()
+    if not SHOW_GAME_TIME then return "null" end
     local gt = getGameTime and getGameTime()
     if not gt then return "null" end
     local day = gt.getDayPlusOne and gt:getDayPlusOne() or (gt:getDay() + 1)
@@ -68,6 +76,7 @@ end
 
 -- Overall health 0-100 (BodyDamage), or "null" if it cannot be read for this player.
 local function readHealth(p)
+    if not SHOW_HEALTH then return "null" end
     local ok, hp = pcall(function() return p:getBodyDamage():getHealth() end)
     if not ok or type(hp) ~= "number" then return "null" end
     return tostring(math.max(0, math.min(100, math.floor(hp))))
