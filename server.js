@@ -87,6 +87,23 @@ export function readVersion(root = HERE) {
   return { version, commit };
 }
 
+// ---- safehouses: sanitised from the mod's file, which is trusted but may be mid-write or odd ----
+const SAFEHOUSE_MAX = 500;
+const clip = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
+
+export function cleanSafehouses(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((h) => h && [h.x, h.y, h.w, h.h].every(Number.isFinite) && h.w > 0 && h.h > 0)
+    .slice(0, SAFEHOUSE_MAX)
+    .map((h) => ({
+      owner: clip(h.owner, 64),
+      title: clip(h.title, 64),
+      x: h.x, y: h.y, w: h.w, h: h.h,
+      members: (Array.isArray(h.members) ? h.members : []).filter((m) => typeof m === "string").slice(0, 50).map((m) => m.slice(0, 64)),
+    }));
+}
+
 // ---- positions ------------------------------------------------------------
 
 export function readPlayers(cfg, now = Date.now()) {
@@ -102,23 +119,26 @@ export function readPlayers(cfg, now = Date.now()) {
       }
     } catch {}
   }
-  if (!file) return { available: false, stale: true, reason: "no-file", updatedAt: null, players: [] };
+  if (!file) return { available: false, stale: true, reason: "no-file", updatedAt: null, players: [], safehouses: [] };
   const ageMs = now - stat.mtimeMs;
   const staleAfterMs = Math.max(cfg.refreshSeconds, MOD_INTERVAL_SECONDS) * 3000;
   const stale = ageMs > staleAfterMs;
   const base = { available: true, stale, reason: stale ? "stale" : null, ageSeconds: Math.round(ageMs / 1000), updatedAt: stat.mtimeMs };
   let players = [];
+  let safehouses = [];
   try {
     const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    safehouses = cleanSafehouses(data.safehouses);
     players = (Array.isArray(data.players) ? data.players : [])
       .filter((p) => p && typeof p.name === "string" && Number.isFinite(p.x) && Number.isFinite(p.y))
       .map((p) => ({ name: p.name, x: p.x, y: p.y, z: Number.isFinite(p.z) ? p.z : 0 }));
   } catch {
     // Mid-write read; the client keeps its last good state and retries.
-    return { ...base, players: [], error: "unreadable" };
+    return { ...base, players: [], safehouses: [], error: "unreadable" };
   }
-  // A stale file means the server (or mod) stopped: nobody is shown as online.
-  return { ...base, players: stale ? [] : players };
+  // A stale file means the server (or mod) stopped: nobody is shown as online. Safehouses are
+  // persistent, so the last known ones stay on the map.
+  return { ...base, players: stale ? [] : players, safehouses };
 }
 
 // ---- build detection ------------------------------------------------------

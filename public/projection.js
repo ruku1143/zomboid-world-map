@@ -61,6 +61,14 @@ export function parseView(search, m) {
 // Marker colours, picked to stand out on the olive map and from each other.
 export const PLAYER_COLORS = ["#f2b134", "#ff4d4d", "#36d1ff", "#b388ff", "#ff7eb6", "#ffffff", "#4d7cff", "#ff7a1a", "#e6ff4d", "#2ee6c5"];
 
+// The four corners of a safehouse rectangle (x, y, w, h in game tiles) as a diamond in dzi pixels.
+export function safehouseCorners(h, m) {
+  return [[h.x, h.y], [h.x + h.w, h.y], [h.x + h.w, h.y + h.h], [h.x, h.y + h.h]].map(([gx, gy]) => gameToDzi(gx, gy, m));
+}
+
+// A name's own colour, ignoring who else is online (used for owners who are offline).
+export const colorForName = (name, palette = PLAYER_COLORS) => palette[hashName(name) % palette.length];
+
 const hashName = (name) => {
   let h = 2166136261; // FNV-1a
   for (let i = 0; i < name.length; i++) h = Math.imul(h ^ name.charCodeAt(i), 16777619) >>> 0;
