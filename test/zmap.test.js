@@ -6,10 +6,10 @@ import os from "node:os";
 import path from "node:path";
 import {
   MAP, mapFromDescriptors, loadConfig, readPlayers, readBuildInfo,
-  readVersion, cleanSafehouses, readServerName, cleanGameTime, cacheTile, readCachedTile, createServer,
+  readVersion, cleanSafehouses, readServerName, cleanGameTime, tilePaths, cacheTile, readCachedTile, createServer,
 } from "../server.js";
 import { prefetch } from "../prefetch.js";
-import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, stepCamera, PAN_MS, assignColors, colorForName, safehouseCorners, PLAYER_COLORS, MIN_ZOOM } from "../public/projection.js";
+import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, stepCamera, PAN_MS, clampFloor, floorLabel, parseFloor, assignColors, colorForName, safehouseCorners, PLAYER_COLORS, MIN_ZOOM } from "../public/projection.js";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "zmap-"));
 
@@ -176,6 +176,22 @@ test("stepCamera eases toward the goal, keeps the zoom anchor fixed and settles 
   assert.deepEqual([c3.x, c3.y, c3.scale], [g3.x, g3.y, g3.scale]);
 });
 
+test("tilePaths: ground floor keeps its cache layout, other floors get their own layer", () => {
+  const { cfg } = setup({ TILES_ROOT: "https://host" });
+  assert.deepEqual(tilePaths(cfg, 0, 15, "3_2.jpg"), { rel: "42.20.0/15/3_2.jpg", upstream: "https://host/42.20.0/base/layer0_files/15/3_2.jpg" });
+  assert.deepEqual(tilePaths(cfg, 2, 15, "3_2.jpg"), { rel: "42.20.0/f2/15/3_2.jpg", upstream: "https://host/42.20.0/base/layer2_files/15/3_2.jpg" });
+  assert.equal(tilePaths(cfg, -1, 15, "3_2.jpg").upstream, "https://host/42.20.0/base/layer-1_files/15/3_2.jpg");
+});
+
+test("floor helpers clamp to -1..7, label floors and read the URL", () => {
+  assert.deepEqual([clampFloor(-5), clampFloor(0), clampFloor(3.4), clampFloor(99), clampFloor("x"), clampFloor(undefined)], [-1, 0, 3, 7, 0, 0]);
+  assert.deepEqual([floorLabel(0), floorLabel(3), floorLabel(-1)], ["G", "3", "B1"]);
+  assert.equal(parseFloor("?x=1&floor=2"), 2);
+  assert.equal(parseFloor("?floor=40"), 7);
+  assert.equal(parseFloor("?floor=abc"), 0);
+  assert.equal(parseFloor("?x=1"), 0);
+});
+
 test("parseView reads shareable URL params", () => {
   const m = MAP;
   assert.deepEqual(parseView("?x=10000&y=9000&zoom=13", m), { x: 10000, y: 9000, zoom: 13 });
@@ -290,6 +306,9 @@ function fakeTilesHost(hits) {
     if (req.url === "/42.20.0/base/layer0_files/15/3_2.jpg") {
       res.setHeader("Content-Type", "image/jpeg");
       res.end("JPEGDATA");
+    } else if (req.url === "/42.20.0/base/layer2_files/15/3_2.jpg" || req.url === "/42.20.0/base/layer-1_files/15/3_2.jpg") {
+      res.setHeader("Content-Type", "image/jpeg");
+      res.end(req.url.includes("layer2") ? "FLOOR2" : "BASEMENT");
     } else {
       res.statusCode = 404;
       res.end("nope");
@@ -355,6 +374,16 @@ test("server: meta, players and tiles; 404 tiles stay empty and are not re-reque
     assert.ok(afterFirst > before);
     assert.equal((await fetch(`${base}/tiles/15/9_9.jpg`)).status, 404);
     assert.equal(hits.length, afterFirst, "second request for an empty tile must not reach the host");
+
+    // Other floors: separate upstream layer and separate cache entry; floor 0 is unchanged.
+    const f2 = await fetch(`${base}/tiles/f2/15/3_2.jpg`);
+    assert.equal(await f2.text(), "FLOOR2");
+    assert.equal((await fetch(`${base}/tiles/f2/15/3_2.jpg`)).headers.get("x-tile-cache"), "hit");
+    assert.equal(await (await fetch(`${base}/tiles/f-1/15/3_2.jpg`)).text(), "BASEMENT");
+    assert.equal(await (await fetch(`${base}/tiles/15/3_2.jpg`)).text(), "JPEGDATA", "the ground floor is not mixed up with the others");
+    assert.equal((await fetch(`${base}/tiles/f3/15/3_2.jpg`)).status, 404, "a floor with nothing rendered is empty");
+    assert.equal((await fetch(`${base}/tiles/f9/15/3_2.jpg`)).status, 400, "floors above 7 are rejected");
+    assert.equal((await fetch(`${base}/tiles/f-2/15/3_2.jpg`)).status, 400, "and below -1");
 
     assert.equal((await fetch(`${base}/tiles/99/0_0.jpg`)).status, 400);
     assert.equal((await fetch(`${base}/tiles/5/..%2f..%2fx.jpg`)).status, 404);

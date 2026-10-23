@@ -27,6 +27,10 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
 #safehouses small { color: var(--muted); text-align: right; }
 #empty { color: var(--muted); margin: 8px 0; }
 #empty[hidden] { display: none; }
+#floors { position: fixed; left: 12px; top: calc(var(--bar-h, 48px) + 44px); display: flex; flex-direction: column; gap: 4px; }
+#floors button { width: 40px; height: 36px; padding: 0; background: var(--panel); font-size: 14px; font-variant-numeric: tabular-nums; }
+#floors button:disabled { opacity: 0.35; cursor: default; }
+#floors button.away { color: var(--accent); border-color: var(--accent); font-weight: 600; }
 #banner { position: fixed; top: calc(var(--bar-h, 48px) + 4px); left: 16px; right: 290px; max-width: 520px; display: flex; gap: 12px; align-items: flex-start; background: var(--warn); color: #fff; padding: 8px 12px; border-radius: 6px; }
 #banner[hidden] { display: none; }
 #banner span { flex: 1; }

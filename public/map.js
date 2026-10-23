@@ -1,4 +1,4 @@
-import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, stepCamera, PAN_MS, assignColors, colorForName, safehouseCorners, parseView, MIN_ZOOM } from "./projection.js";
+import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, stepCamera, PAN_MS, assignColors, colorForName, safehouseCorners, parseView, MIN_ZOOM, clampFloor, floorLabel, parseFloor, FLOOR_MIN, FLOOR_MAX } from "./projection.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("map");
@@ -30,7 +30,9 @@ const tiles = new Map();
 const queue = [];
 let loading = 0;
 
-const tileKey = (l, c, r) => `${l}/${c}_${r}`;
+// The key doubles as the URL path, so it names the floor (ground floor keeps the short form).
+let floor = 0; // -1 basement, 0 ground, 1-7 upper floors
+const tileKey = (l, c, r) => (floor ? `f${floor}/${l}/${c}_${r}` : `${l}/${c}_${r}`);
 // Tile URLs carry the map build so the browser (and any CDN) never reuses a tile cached for another one.
 let tileVersion = "0";
 
@@ -184,6 +186,8 @@ function drawPlayers() {
     const d = gameToDzi(p.dx, p.dy, meta.map);
     const s = toScreen(d.x, d.y);
     if (s.x < -100 || s.y < -20 || s.x > innerWidth + 100 || s.y > innerHeight + 20) continue;
+    // Players on another floor stay visible but faded.
+    ctx.globalAlpha = clampFloor(p.z) === floor ? 1 : 0.4;
     // Same look as the list swatch (.swatch): colour disc, dark border, faint light outer ring.
     const R = 7;
     ctx.beginPath();
@@ -213,6 +217,7 @@ function drawPlayers() {
     ctx.fillStyle = "#e6e9ee"; // --text
     ctx.fillText(label, s.x + 14, s.y);
   }
+  ctx.globalAlpha = 1;
 }
 
 // Ease each player's displayed position toward its latest reported one.
@@ -338,9 +343,31 @@ function syncUrl() {
     if (!meta) return;
     const g = dziToGame(cam.x, cam.y, meta.map);
     const q = new URLSearchParams({ x: Math.round(g.x), y: Math.round(g.y), zoom: zoomForScale(cam.scale, meta.map).toFixed(1) });
+    if (floor) q.set("floor", floor);
     try { history.replaceState(null, "", `?${q}`); } catch {}
   }, 300);
 }
+
+function updateFloorUi() {
+  $("floorLabel").textContent = floorLabel(floor);
+  $("floorLabel").classList.toggle("away", floor !== 0);
+  $("floorUp").disabled = floor >= FLOOR_MAX;
+  $("floorDown").disabled = floor <= FLOOR_MIN;
+}
+
+function setFloor(next) {
+  next = clampFloor(next);
+  if (next === floor) return;
+  // Tiles still waiting in the queue belong to the floor being left: forget them.
+  for (const key of queue.splice(0)) tiles.delete(key);
+  floor = next;
+  updateFloorUi();
+  redraw();
+  syncUrl();
+}
+$("floorUp").addEventListener("click", () => setFloor(floor + 1));
+$("floorDown").addEventListener("click", () => setFloor(floor - 1));
+$("floorLabel").addEventListener("click", () => setFloor(0));
 
 function centerOnGame(gx, gy) {
   const d = gameToDzi(gx, gy, meta.map);
@@ -377,9 +404,10 @@ function renderPlayers(data) {
     swatch.style.background = colors.get(p.name);
     name.append(swatch, p.car ? `${p.name} 🚗` : p.name);
     const sub = document.createElement("small");
-    sub.textContent = `${p.hp == null ? "" : `${p.hp}% HP · `}${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
+    const z = clampFloor(p.z);
+    sub.textContent = `${p.hp == null ? "" : `${p.hp}% HP · `}${z ? `${z > 0 ? "F" : "B"}${Math.abs(z)} · ` : ""}${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
     li.append(name, sub);
-    li.addEventListener("click", () => centerOnGame(p.x, p.y));
+    li.addEventListener("click", () => { centerOnGame(p.x, p.y); setFloor(clampFloor(p.z)); });
     return li;
   }));
   renderSafehouses(data.safehouses || []);
@@ -451,6 +479,8 @@ async function init() {
   $("version").textContent = ["v" + meta.app?.version, meta.app?.commit].filter((x) => x && x !== "vundefined" && x !== "vnull").join(" · ");
   $("title").textContent = meta.serverName;
   if (meta.build.supported === false) banner(`Game version ${meta.build.version} is a different build than the map (Build ${meta.map.dir.split(".")[0]}). The map may not match this world.`);
+  floor = parseFloor(location.search);
+  updateFloorUi();
   const view = parseView(location.search, meta.map);
   if (view) {
     const d = gameToDzi(view.x, view.y, meta.map);
