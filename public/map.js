@@ -1,4 +1,4 @@
-import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, assignColors, colorForName, safehouseCorners, parseView, MIN_ZOOM } from "./projection.js";
+import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, stepCamera, PAN_MS, assignColors, colorForName, safehouseCorners, parseView, MIN_ZOOM } from "./projection.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("map");
@@ -16,6 +16,10 @@ let showSafehouses = true;
 try { showSafehouses = localStorage.getItem("zmap-safehouses") !== "0"; } catch {}
 const ownerColor = (h) => colors.get(h.owner) || colorForName(h.owner || h.title || "?");
 const cam = { x: 0, y: 0, scale: 0.001 }; // dzi px at screen centre, canvas px per dzi px
+// Where the camera is heading; `cam` eases toward it (see stepCamera). ax/ay: screen point a zoom is anchored on.
+const goal = { x: 0, y: 0, scale: 0.001, ax: null, ay: null };
+const syncGoal = () => Object.assign(goal, { x: cam.x, y: cam.y, scale: cam.scale, ax: null, ay: null });
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let dirty = true;
 const redraw = () => (dirty = true);
 
@@ -215,9 +219,7 @@ function drawPlayers() {
 const GLIDE_MS = 300; // time constant of the glide
 const SNAP_TILES = 500; // farther than this is a teleport/respawn: jump instead of gliding
 let lastFrame = 0;
-function glidePlayers(now) {
-  const dt = lastFrame ? Math.min(now - lastFrame, 100) : 0;
-  lastFrame = now;
+function glidePlayers(dt) {
   const k = 1 - Math.exp(-dt / GLIDE_MS);
   for (const p of players) {
     const ex = p.x - p.dx, ey = p.y - p.dy;
@@ -232,29 +234,47 @@ function glidePlayers(now) {
 }
 
 function loop(now) {
-  glidePlayers(now);
+  const dt = lastFrame ? Math.min(now - lastFrame, 100) : 0;
+  lastFrame = now;
+  glidePlayers(dt);
+  if (meta && (cam.x !== goal.x || cam.y !== goal.y || cam.scale !== goal.scale)) {
+    stepCamera(cam, goal, reduceMotion ? Infinity : dt, innerWidth, innerHeight);
+    dirty = true;
+    syncUrl();
+  }
   if (dirty) { dirty = false; draw(); }
   requestAnimationFrame(loop);
 }
 
 // ---- interaction ----------------------------------------------------------
-function zoomAt(sx, sy, factor) {
-  const before = toDzi(sx, sy);
-  cam.scale = Math.min(MAX_SCALE, Math.max(minScale, cam.scale * factor));
-  const after = toDzi(sx, sy);
-  cam.x += before.x - after.x;
-  cam.y += before.y - after.y;
+// Wheel and button zooms set a goal the camera eases to; pinch (`instant`) follows the fingers exactly.
+function zoomAt(sx, sy, factor, instant = false) {
+  if (instant || reduceMotion) {
+    const before = toDzi(sx, sy);
+    cam.scale = Math.min(MAX_SCALE, Math.max(minScale, cam.scale * factor));
+    const after = toDzi(sx, sy);
+    cam.x += before.x - after.x;
+    cam.y += before.y - after.y;
+    syncGoal();
+  } else {
+    goal.scale = Math.min(MAX_SCALE, Math.max(minScale, goal.scale * factor));
+    goal.ax = sx; goal.ay = sy;
+  }
   redraw();
   syncUrl();
 }
 
+const FLING_MAX = 3; // px/ms cap on release speed
 const pointers = new Map();
 let pinchDist = 0;
+let samples = []; // recent single-finger drag points, for the fling on release
 canvas.addEventListener("pointerdown", (e) => {
   canvas.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   canvas.classList.add("drag");
   pinchDist = 0;
+  samples = [];
+  goal.x = cam.x; goal.y = cam.y; // grabbing the map stops any glide
 });
 canvas.addEventListener("pointermove", (e) => {
   showCoords(e.clientX, e.clientY);
@@ -264,20 +284,45 @@ canvas.addEventListener("pointermove", (e) => {
   if (pointers.size === 1) {
     cam.x -= (cur.x - prev.x) / cam.scale;
     cam.y -= (cur.y - prev.y) / cam.scale;
+    goal.x = cam.x; goal.y = cam.y;
+    const t = performance.now();
+    samples.push({ t, x: cur.x, y: cur.y });
+    samples = samples.filter((p) => t - p.t <= 100);
   }
   pointers.set(e.pointerId, cur);
   if (pointers.size === 2) {
     const [a, b] = [...pointers.values()];
     const dist = Math.hypot(a.x - b.x, a.y - b.y);
-    if (pinchDist) zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, dist / pinchDist);
+    if (pinchDist) zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, dist / pinchDist, true);
     pinchDist = dist;
   }
   redraw();
 });
-const endPointer = (e) => { pointers.delete(e.pointerId); pinchDist = 0; if (!pointers.size) { canvas.classList.remove("drag"); syncUrl(); } };
+const endPointer = (e) => {
+  const wasSingle = pointers.size === 1 && pointers.has(e.pointerId);
+  pointers.delete(e.pointerId);
+  pinchDist = 0;
+  if (pointers.size) return;
+  canvas.classList.remove("drag");
+  // Let go while still moving: coast on in the drag direction.
+  const t = performance.now();
+  const first = samples[0], last = samples[samples.length - 1];
+  if (wasSingle && e.type === "pointerup" && !reduceMotion && last && first !== last && t - last.t < 80) {
+    const dtMs = Math.max(last.t - first.t, 1);
+    const cap = (v) => Math.max(-FLING_MAX, Math.min(FLING_MAX, v));
+    goal.x = cam.x - (cap((last.x - first.x) / dtMs) / cam.scale) * PAN_MS;
+    goal.y = cam.y - (cap((last.y - first.y) / dtMs) / cam.scale) * PAN_MS;
+  }
+  samples = [];
+  syncUrl();
+};
 canvas.addEventListener("pointerup", endPointer);
 canvas.addEventListener("pointercancel", endPointer);
-canvas.addEventListener("wheel", (e) => { e.preventDefault(); zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY; // Firefox reports lines
+  zoomAt(e.clientX, e.clientY, Math.exp(-dy * 0.0015));
+}, { passive: false });
 
 function showCoords(sx, sy) {
   if (!meta) return;
@@ -299,7 +344,8 @@ function syncUrl() {
 
 function centerOnGame(gx, gy) {
   const d = gameToDzi(gx, gy, meta.map);
-  cam.x = d.x; cam.y = d.y;
+  goal.x = d.x; goal.y = d.y; // glides there
+  goal.ax = null; goal.ay = null;
   redraw();
   syncUrl();
 }
@@ -414,6 +460,7 @@ async function init() {
     cam.x = d.x; cam.y = d.y; cam.scale = scaleForZoom(14, meta.map);
   }
   cam.scale = Math.min(MAX_SCALE, Math.max(minScale, cam.scale));
+  syncGoal();
   redraw();
   poll();
 }

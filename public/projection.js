@@ -95,3 +95,34 @@ export function assignColors(names, palette = PLAYER_COLORS) {
   }
   return out;
 }
+
+// ---- camera easing --------------------------------------------------------
+// The camera (`cam`) eases toward a goal each frame, so wheel zoom, flings and "centre on player"
+// glide instead of jumping. Time constants in ms: how long it takes to cover ~63% of the way.
+export const PAN_MS = 200;
+export const ZOOM_MS = 140;
+
+// Advance `cam` toward `goal` by `dt` ms for a viewport of vw x vh px. Zooming eases in log space
+// about the goal's screen anchor (ax, ay; null = screen centre) so the point under the cursor stays
+// put; the pan part of the goal is shifted by the same correction. Returns true while still moving.
+// dt = Infinity jumps straight to the goal (reduced motion).
+export function stepCamera(cam, goal, dt, vw, vh) {
+  const kz = 1 - Math.exp(-dt / ZOOM_MS);
+  const kp = 1 - Math.exp(-dt / PAN_MS);
+  if (goal.scale !== cam.scale) {
+    const ratio = goal.scale / cam.scale;
+    const next = Math.abs(Math.log(ratio)) < 0.0005 ? goal.scale : cam.scale * ratio ** kz;
+    const ax = (goal.ax ?? vw / 2) - vw / 2, ay = (goal.ay ?? vh / 2) - vh / 2;
+    const dx = ax / cam.scale - ax / next, dy = ay / cam.scale - ay / next;
+    cam.x += dx; cam.y += dy;
+    goal.x += dx; goal.y += dy;
+    cam.scale = next;
+  }
+  const ex = goal.x - cam.x, ey = goal.y - cam.y;
+  if (Math.hypot(ex, ey) * cam.scale < 0.05) {
+    cam.x = goal.x; cam.y = goal.y;
+  } else {
+    cam.x += ex * kp; cam.y += ey * kp;
+  }
+  return cam.x !== goal.x || cam.y !== goal.y || cam.scale !== goal.scale;
+}
