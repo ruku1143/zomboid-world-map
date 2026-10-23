@@ -9,7 +9,7 @@ import {
   readVersion, cleanSafehouses, readServerName, cleanGameTime, cacheTile, readCachedTile, createServer,
 } from "../server.js";
 import { prefetch } from "../prefetch.js";
-import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, assignColors, colorForName, safehouseCorners, PLAYER_COLORS, MIN_ZOOM } from "../public/projection.js";
+import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, stepCamera, PAN_MS, assignColors, colorForName, safehouseCorners, PLAYER_COLORS, MIN_ZOOM } from "../public/projection.js";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "zmap-"));
 
@@ -145,6 +145,35 @@ test("level and zoom helpers", () => {
   assert.equal(levelForScale(1, m), m.renderedMaxLevel);
   assert.equal(levelForScale(1e-9, m), 0);
   assert.equal(tileSpan(m.maxLevel, m), m.tileSize);
+});
+
+test("stepCamera eases toward the goal, keeps the zoom anchor fixed and settles exactly", () => {
+  const vw = 800, vh = 600;
+  const screenToDzi = (c, sx, sy) => ({ x: (sx - vw / 2) / c.scale + c.x, y: (sy - vh / 2) / c.scale + c.y });
+  const cam = { x: 1000, y: 2000, scale: 0.01 };
+  const goal = { x: 1000, y: 2000, scale: 0.04, ax: 600, ay: 150 };
+  const pinned = screenToDzi(cam, 600, 150);
+  const s1 = stepCamera(cam, goal, 16, vw, vh);
+  assert.ok(s1, "still moving after one frame");
+  assert.ok(cam.scale > 0.01 && cam.scale < 0.04, "partway there");
+  let p = screenToDzi(cam, 600, 150);
+  assert.ok(Math.abs(p.x - pinned.x) < 1e-6 && Math.abs(p.y - pinned.y) < 1e-6, "the point under the cursor does not move");
+  let frames = 0;
+  while (stepCamera(cam, goal, 16, vw, vh) && frames++ < 1000);
+  assert.ok(frames < 1000, "settles");
+  assert.equal(cam.scale, 0.04);
+  assert.equal(cam.x, goal.x);
+  assert.equal(cam.y, goal.y);
+  p = screenToDzi(cam, 600, 150);
+  assert.ok(Math.abs(p.x - pinned.x) < 1e-6 && Math.abs(p.y - pinned.y) < 1e-6, "still anchored at the end");
+  // Pure pan: exponential approach, about 63% after PAN_MS.
+  const c2 = { x: 0, y: 0, scale: 1 }, g2 = { x: 1000, y: 0, scale: 1, ax: null, ay: null };
+  stepCamera(c2, g2, PAN_MS, vw, vh);
+  assert.ok(Math.abs(c2.x - 1000 * (1 - Math.exp(-1))) < 1e-6);
+  // dt = Infinity (reduced motion) jumps straight there.
+  const c3 = { x: 0, y: 0, scale: 0.01 }, g3 = { x: 50, y: 60, scale: 0.5, ax: null, ay: null };
+  assert.equal(stepCamera(c3, g3, Infinity, vw, vh), false);
+  assert.deepEqual([c3.x, c3.y, c3.scale], [g3.x, g3.y, g3.scale]);
 });
 
 test("parseView reads shareable URL params", () => {
