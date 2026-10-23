@@ -11,7 +11,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 #clock { color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #clock:empty { display: none; }
 button { background: transparent; color: var(--text); border: 1px solid var(--muted); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
-#panel { position: fixed; top: 48px; right: 0; width: 340px; max-height: calc(100% - 100px); overflow: auto; background: var(--panel); padding: 8px 16px; border-radius: 0 0 0 8px; }
+#panel { position: fixed; top: var(--bar-h, 48px); right: 0; width: 340px; max-height: calc(100% - 100px); overflow: auto; background: var(--panel); padding: 8px 16px; border-radius: 0 0 0 8px; }
 #panel.hidden { display: none; }
 #players { list-style: none; margin: 0; padding: 0; }
 #players li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; border-bottom: 1px solid #ffffff14; }
@@ -27,7 +27,7 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
 #safehouses small { color: var(--muted); text-align: right; }
 #empty { color: var(--muted); margin: 8px 0; }
 #empty[hidden] { display: none; }
-#banner { position: fixed; top: 52px; left: 16px; right: 290px; max-width: 520px; display: flex; gap: 12px; align-items: flex-start; background: var(--warn); color: #fff; padding: 8px 12px; border-radius: 6px; }
+#banner { position: fixed; top: calc(var(--bar-h, 48px) + 4px); left: 16px; right: 290px; max-width: 520px; display: flex; gap: 12px; align-items: flex-start; background: var(--warn); color: #fff; padding: 8px 12px; border-radius: 6px; }
 #banner[hidden] { display: none; }
 #banner span { flex: 1; }
 #banner button { padding: 0 8px; font-size: 18px; line-height: 1.2; border: 0; color: inherit; }
@@ -38,6 +38,10 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
   #players small { white-space: normal; text-align: right; }
   #panel { width: 100%; top: auto; bottom: 0; max-height: 40%; border-radius: 8px 8px 0 0; }
   #banner { right: 16px; }
-  #coords { bottom: auto; top: 48px; border-radius: 0 0 8px 0; }
+  #coords { bottom: auto; top: var(--bar-h, 48px); border-radius: 0 0 8px 0; }
+  /* Row 1: title, clock, Players button. Row 2: the status text, on its own line. */
+  #bar { flex-wrap: wrap; gap: 2px 12px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); }
+  #title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #status { order: 3; flex: 1 1 100%; }
   #version { display: none; }
 }
