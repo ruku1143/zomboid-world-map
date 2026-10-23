@@ -422,6 +422,10 @@ $("toggle").addEventListener("click", () => {
   const expanded = !$("panel").classList.toggle("hidden");
   $("toggle").setAttribute("aria-expanded", String(expanded));
 });
+// The top bar wraps on narrow screens, so things pinned under it follow its real height.
+if (window.ResizeObserver) {
+  new ResizeObserver(() => document.documentElement.style.setProperty("--bar-h", `${$("bar").offsetHeight}px`)).observe($("bar"));
+}
 addEventListener("resize", resize);
 resize();
 loop();
