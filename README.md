@@ -89,7 +89,9 @@ Tiles are fetched from `tiles.pzmap.org` the first time they are viewed and then
 ```
 sudo -u zmap bash -c 'set -a; . /etc/zmap.env; node /srv/zomboid-map/prefetch.js'      # levels 0-17, about 150 MB
 sudo -u zmap bash -c 'set -a; . /etc/zmap.env; node /srv/zomboid-map/prefetch.js 18'   # about 0.5 GB total, also raise TILE_CACHE_MAX_MB
+sudo -u zmap bash -c 'set -a; . /etc/zmap.env; node /srv/zomboid-map/prefetch.js 17 --floors=all'   # every floor, basement to floor 7
 ```
+By default only the ground floor is cached. `--floors=all` also caches the basement and floors 1 to 7, or give a list such as `--floors=0,1,2`. Each extra floor adds up to about the ground floor's size at the same level, so raise `TILE_CACHE_MAX_MB` to match (the cache evicts the least recently used tiles once it is full). Floors you don't prefetch are still cached the first time someone views them.
 It skips tiles that are already cached, so it is safe to re-run (for example after a game update clears the cache). Level 17 and below covers the whole-world and town views (URL `zoom` 17 and below); deeper levels are still fetched on demand. While a tile loads, a blurrier stand-in from a coarser level is shown, so a warm cache also removes that.
 
 Generating tiles from the game files instead is not practical: the map art on the tile host comes from rendering the game's lot files and texture packs with an offline tool, which needs the full game data and takes hours. The game's own world map (`worldmap.xml.bin`) is a vector map with a different look and would need its own renderer, so it is not supported here.
