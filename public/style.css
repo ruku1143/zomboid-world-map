@@ -25,8 +25,14 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
 #safehouses { list-style: none; margin: 0; padding: 0; }
 #safehouses li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; cursor: pointer; border-bottom: 1px solid #ffffff14; }
 #safehouses small { color: var(--muted); text-align: right; }
+#mapOpts { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #ffffff14; }
+#mapOpts label { color: var(--muted); font-size: 12px; cursor: pointer; }
 #empty { color: var(--muted); margin: 8px 0; }
 #empty[hidden] { display: none; }
+#floors { position: fixed; left: 12px; top: calc(var(--bar-h, 48px) + 44px); display: flex; flex-direction: column; gap: 4px; }
+#floors button { width: 40px; height: 36px; padding: 0; background: var(--panel); font-size: 14px; font-variant-numeric: tabular-nums; }
+#floors button:disabled { opacity: 0.35; cursor: default; }
+#floors button.away { color: var(--accent); border-color: var(--accent); font-weight: 600; }
 #banner { position: fixed; top: calc(var(--bar-h, 48px) + 4px); left: 16px; right: 290px; max-width: 520px; display: flex; gap: 12px; align-items: flex-start; background: var(--warn); color: #fff; padding: 8px 12px; border-radius: 6px; }
 #banner[hidden] { display: none; }
 #banner span { flex: 1; }

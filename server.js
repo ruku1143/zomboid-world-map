@@ -281,8 +281,21 @@ export async function fetchUpstream(url) {
   return { status: 502 };
 }
 
-async function serveTile(cfg, level, tile, res) {
-  const rel = `${MAP.dir}/${level}/${tile}`;
+export const FLOOR_MIN = -1; // basement
+export const FLOOR_MAX = 7;
+
+// Cache path (rel) and upstream URL for a tile. Floor 0 keeps the original cache layout so tiles
+// cached before floors existed stay valid; other floors live under f<floor>/. Upstream names the
+// floor layer by number: layer0_files, layer1_files, layer-1_files.
+export function tilePaths(cfg, floor, level, tile) {
+  return {
+    rel: floor === 0 ? `${MAP.dir}/${level}/${tile}` : `${MAP.dir}/f${floor}/${level}/${tile}`,
+    upstream: `${cfg.tilesRoot}/${MAP.dir}/base/layer${floor}_files/${level}/${tile}`,
+  };
+}
+
+async function serveTile(cfg, floor, level, tile, res) {
+  const { rel, upstream } = tilePaths(cfg, floor, level, tile);
   const expiry = negative.get(rel);
   if (expiry && expiry > Date.now()) {
     res.writeHead(404, { "X-Tile-Cache": "hit", "Cache-Control": "public, max-age=3600" });
@@ -293,7 +306,7 @@ async function serveTile(cfg, level, tile, res) {
   if (!body) {
     cache = "miss";
     if (!inflight.has(rel)) {
-      const p = fetchUpstream(`${cfg.tilesRoot}/${MAP.dir}/base/layer0_files/${level}/${tile}`).finally(() => inflight.delete(rel));
+      const p = fetchUpstream(upstream).finally(() => inflight.delete(rel));
       inflight.set(rel, p);
     }
     const r = await inflight.get(rel);
@@ -344,11 +357,14 @@ export function createServer(cfg) {
     if (p === "/api/meta") {
       return json(res, 200, { app, serverName: readServerName(cfg), refreshSeconds: cfg.refreshSeconds, build: readBuildInfo(cfg), map: MAP });
     }
-    const tm = p.match(/^\/tiles\/(\d{1,2})\/(\d{1,6}_\d{1,6})\.jpg$/);
+    // /tiles/<level>/<col>_<row>.jpg is the ground floor; /tiles/f<floor>/<level>/... other floors.
+    const tm = p.match(/^\/tiles\/(?:f(-?\d)\/)?(\d{1,2})\/(\d{1,6}_\d{1,6})\.jpg$/);
     if (tm) {
-      const level = Number(tm[1]);
+      const floor = tm[1] === undefined ? 0 : Number(tm[1]);
+      const level = Number(tm[2]);
       if (level > MAP.maxLevel) return json(res, 400, { error: "invalid level" });
-      return serveTile(cfg, level, `${tm[2]}.jpg`, res);
+      if (floor < FLOOR_MIN || floor > FLOOR_MAX) return json(res, 400, { error: "invalid floor" });
+      return serveTile(cfg, floor, level, `${tm[3]}.jpg`, res);
     }
 
     // Static files, with traversal guard.

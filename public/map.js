@@ -1,4 +1,5 @@
-import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, stepCamera, PAN_MS, assignColors, colorForName, safehouseCorners, parseView, MIN_ZOOM } from "./projection.js";
+import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, stepCamera, PAN_MS, assignColors, colorForName, safehouseCorners, parseView, MIN_ZOOM, clampFloor, floorLabel, parseFloor, FLOOR_MIN, FLOOR_MAX } from "./projection.js";
+import { TOWNS } from "./towns.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("map");
@@ -14,6 +15,8 @@ let colors = new Map();
 let safehouses = [];
 let showSafehouses = true;
 try { showSafehouses = localStorage.getItem("zmap-safehouses") !== "0"; } catch {}
+let showTowns = true;
+try { showTowns = localStorage.getItem("zmap-towns") !== "0"; } catch {}
 const ownerColor = (h) => colors.get(h.owner) || colorForName(h.owner || h.title || "?");
 const cam = { x: 0, y: 0, scale: 0.001 }; // dzi px at screen centre, canvas px per dzi px
 // Where the camera is heading; `cam` eases toward it (see stepCamera). ax/ay: screen point a zoom is anchored on.
@@ -30,7 +33,9 @@ const tiles = new Map();
 const queue = [];
 let loading = 0;
 
-const tileKey = (l, c, r) => `${l}/${c}_${r}`;
+// The key doubles as the URL path, so it names the floor (ground floor keeps the short form).
+let floor = 0; // -1 basement, 0 ground, 1-7 upper floors
+const tileKey = (l, c, r) => (floor ? `f${floor}/${l}/${c}_${r}` : `${l}/${c}_${r}`);
 // Tile URLs carry the map build so the browser (and any CDN) never reuses a tile cached for another one.
 let tileVersion = "0";
 
@@ -139,6 +144,7 @@ function draw() {
     }
   }
   if (showSafehouses) drawSafehouses();
+  if (showTowns) drawTowns();
   drawPlayers();
 }
 
@@ -177,6 +183,30 @@ function drawSafehouses() {
   ctx.textAlign = "start";
 }
 
+// Town names show when zoomed out and fade away as you zoom in to street level.
+const TOWNS_FULL_ZOOM = 15.8, TOWNS_GONE_ZOOM = 16.8;
+function drawTowns() {
+  const alpha = Math.min(1, Math.max(0, (TOWNS_GONE_ZOOM - zoomForScale(cam.scale, meta.map)) / (TOWNS_GONE_ZOOM - TOWNS_FULL_ZOOM)));
+  if (alpha === 0) return;
+  ctx.font = "600 16px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = 4;
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "#12151a";
+  ctx.fillStyle = "#e6e9ee";
+  ctx.globalAlpha = alpha;
+  for (const t of TOWNS) {
+    const d = gameToDzi(t.x, t.y, meta.map);
+    const s = toScreen(d.x, d.y);
+    if (s.x < -100 || s.y < -20 || s.x > innerWidth + 100 || s.y > innerHeight + 20) continue;
+    ctx.strokeText(t.name, s.x, s.y);
+    ctx.fillText(t.name, s.x, s.y);
+  }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = "start";
+}
+
 function drawPlayers() {
   ctx.font = "14px system-ui, sans-serif"; // same as the player list
   ctx.textBaseline = "middle";
@@ -184,6 +214,8 @@ function drawPlayers() {
     const d = gameToDzi(p.dx, p.dy, meta.map);
     const s = toScreen(d.x, d.y);
     if (s.x < -100 || s.y < -20 || s.x > innerWidth + 100 || s.y > innerHeight + 20) continue;
+    // Players on another floor stay visible but faded.
+    ctx.globalAlpha = clampFloor(p.z) === floor ? 1 : 0.4;
     // Same look as the list swatch (.swatch): colour disc, dark border, faint light outer ring.
     const R = 7;
     ctx.beginPath();
@@ -213,6 +245,7 @@ function drawPlayers() {
     ctx.fillStyle = "#e6e9ee"; // --text
     ctx.fillText(label, s.x + 14, s.y);
   }
+  ctx.globalAlpha = 1;
 }
 
 // Ease each player's displayed position toward its latest reported one.
@@ -338,9 +371,31 @@ function syncUrl() {
     if (!meta) return;
     const g = dziToGame(cam.x, cam.y, meta.map);
     const q = new URLSearchParams({ x: Math.round(g.x), y: Math.round(g.y), zoom: zoomForScale(cam.scale, meta.map).toFixed(1) });
+    if (floor) q.set("floor", floor);
     try { history.replaceState(null, "", `?${q}`); } catch {}
   }, 300);
 }
+
+function updateFloorUi() {
+  $("floorLabel").textContent = floorLabel(floor);
+  $("floorLabel").classList.toggle("away", floor !== 0);
+  $("floorUp").disabled = floor >= FLOOR_MAX;
+  $("floorDown").disabled = floor <= FLOOR_MIN;
+}
+
+function setFloor(next) {
+  next = clampFloor(next);
+  if (next === floor) return;
+  // Tiles still waiting in the queue belong to the floor being left: forget them.
+  for (const key of queue.splice(0)) tiles.delete(key);
+  floor = next;
+  updateFloorUi();
+  redraw();
+  syncUrl();
+}
+$("floorUp").addEventListener("click", () => setFloor(floor + 1));
+$("floorDown").addEventListener("click", () => setFloor(floor - 1));
+$("floorLabel").addEventListener("click", () => setFloor(0));
 
 function centerOnGame(gx, gy) {
   const d = gameToDzi(gx, gy, meta.map);
@@ -377,9 +432,10 @@ function renderPlayers(data) {
     swatch.style.background = colors.get(p.name);
     name.append(swatch, p.car ? `${p.name} 🚗` : p.name);
     const sub = document.createElement("small");
-    sub.textContent = `${p.hp == null ? "" : `${p.hp}% HP · `}${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
+    const z = clampFloor(p.z);
+    sub.textContent = `${p.hp == null ? "" : `${p.hp}% HP · `}${z ? `${z > 0 ? "F" : "B"}${Math.abs(z)} · ` : ""}${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
     li.append(name, sub);
-    li.addEventListener("click", () => centerOnGame(p.x, p.y));
+    li.addEventListener("click", () => { centerOnGame(p.x, p.y); setFloor(clampFloor(p.z)); });
     return li;
   }));
   renderSafehouses(data.safehouses || []);
@@ -424,6 +480,13 @@ $("shShow").addEventListener("change", (e) => {
   redraw();
 });
 
+$("townsShow").checked = showTowns;
+$("townsShow").addEventListener("change", (e) => {
+  showTowns = e.target.checked;
+  try { localStorage.setItem("zmap-towns", showTowns ? "1" : "0"); } catch {}
+  redraw();
+});
+
 async function poll() {
   if (!document.hidden) {
     try {
@@ -451,6 +514,8 @@ async function init() {
   $("version").textContent = ["v" + meta.app?.version, meta.app?.commit].filter((x) => x && x !== "vundefined" && x !== "vnull").join(" · ");
   $("title").textContent = meta.serverName;
   if (meta.build.supported === false) banner(`Game version ${meta.build.version} is a different build than the map (Build ${meta.map.dir.split(".")[0]}). The map may not match this world.`);
+  floor = parseFloor(location.search);
+  updateFloorUi();
   const view = parseView(location.search, meta.map);
   if (view) {
     const d = gameToDzi(view.x, view.y, meta.map);

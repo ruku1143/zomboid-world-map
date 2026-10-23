@@ -11,6 +11,7 @@ browser <──/api/players, /api/meta, /tiles/*── server.js ──(curl, ca
 - `mod/ZMapPositions/42/media/lua/server/ZMapPositions.lua`: write-only server mod. Writes one JSON document (as `.txt`: Build 42 `getFileWriter` rejects `.json`) with `t`, `time` (in-game clock), `players` (name, x, y, z, `hp`, `car`) and `safehouses`. Invisible/ghost-mode admins are left out. Four option flags at the top (`SHOW_HEALTH`, `SHOW_GAME_TIME`, `SHOW_IN_VEHICLE`, `HIDE_INVISIBLE_ADMINS`). Every game API call is guarded (`pcall` / method-exists checks) so one failing call can't stop position writes.
 - `server.js`: config from env (`deploy/zmap.env.example`), `readPlayers` (sanitises everything the mod wrote; a stale file means nobody online and no clock), `readServerName` (`PublicName` from `<data>/Server/<SERVER_INI>.ini`, falls back to `SERVER_NAME`; only that one line is read, the ini holds the RCON password), `readBuildInfo`, the tile proxy + disk cache, static files. `MAP` is the tile layout constant, copied by hand because the tile host blocks `layer0.dzi`/`map_info.json` from servers.
 - `public/projection.js`: pure functions (projection, zoom/level maths, colours, `stepCamera` easing). Anything that can be pure goes here so it can be unit tested.
+- `public/towns.js`: town label positions (data only, credited in `CHANGES.md`; add or fix towns here).
 - `public/map.js`: the canvas client (tiles, drawing, input, polling). Needs a DOM, so it is not unit tested; verify it in a browser.
 - `prefetch.js`: optional tile pre-warm. `deploy/`: systemd unit, env example, cloudflared notes.
 
@@ -28,6 +29,7 @@ browser <──/api/players, /api/meta, /tiles/*── server.js ──(curl, ca
 - Style tokens live in `public/style.css` (`:root` variables). The top bar wraps on phones, so anything pinned under it uses `var(--bar-h)` (set from the bar's real height in `map.js`), not a fixed pixel offset.
 - Map dots, list swatches and labels share one look (colour disc, dark border, faint light ring, 14px normal-weight name). Keep them in step.
 - Camera: `cam` eases toward `goal` each frame (`stepCamera`); wheel zoom and "centre on player" set the goal, drag and pinch move `cam` directly, releasing a drag flings. Honour `prefers-reduced-motion` (instant).
+- Floors: `floor` in `map.js` (-1..7) is part of the tile key and URL (`tiles/f<floor>/<level>/<col>_<row>.jpg`, ground floor keeps the plain path); `server.js` `tilePaths` maps that to the cache path and the upstream `layer<floor>_files` URL. Players on other floors are drawn at 40% alpha. Town labels fade out between zoom 15.8 and 16.8; both the town and safehouse toggles are remembered in `localStorage`.
 - Player dots glide between polls (`glidePlayers`), snapping instead for jumps over 500 tiles.
 
 ## Deploying (for the owner; details in README)

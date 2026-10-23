@@ -127,3 +127,14 @@ export function stepCamera(cam, goal, dt, vw, vh) {
   }
   return cam.x !== goal.x || cam.y !== goal.y || cam.scale !== goal.scale;
 }
+
+// ---- floors ---------------------------------------------------------------
+// The tile host publishes one render per floor: -1 = basement, 0 = ground, 1-7 = upper floors.
+export const FLOOR_MIN = -1;
+export const FLOOR_MAX = 7;
+export const clampFloor = (f) => Math.max(FLOOR_MIN, Math.min(FLOOR_MAX, Math.round(Number(f)) || 0));
+export const floorLabel = (f) => (f === 0 ? "G" : f > 0 ? String(f) : `B${-f}`);
+export function parseFloor(search) {
+  const raw = new URLSearchParams(search).get("floor");
+  return raw === null || !Number.isFinite(Number(raw)) ? 0 : clampFloor(raw);
+}

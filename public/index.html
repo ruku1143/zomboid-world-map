@@ -21,8 +21,14 @@
   <p id="empty">Nobody is online.</p>
   <div id="shHead"><strong>Safehouses</strong><label><input type="checkbox" id="shShow" checked> Show on map</label></div>
   <ul id="safehouses"></ul>
+  <div id="mapOpts"><strong>Map</strong><label><input type="checkbox" id="townsShow" checked> Town names</label></div>
 </aside>
 <div id="banner" hidden><span id="bannerText"></span><button id="bannerClose" type="button" aria-label="Dismiss">×</button></div>
+<div id="floors" role="group" aria-label="Floor">
+  <button id="floorUp" type="button" aria-label="Floor up" title="Floor up">▲</button>
+  <button id="floorLabel" type="button" title="Current floor (G = ground, B1 = basement). Click to return to the ground floor.">G</button>
+  <button id="floorDown" type="button" aria-label="Floor down" title="Floor down">▼</button>
+</div>
 <div id="coords">—</div>
 <div id="version" title="Map version: package version and git commit running on the server"></div>
 <script type="module" src="map.js"></script>
