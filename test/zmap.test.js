@@ -8,7 +8,7 @@ import {
   MAP, mapFromDescriptors, loadConfig, readPlayers, readBuildInfo,
   readVersion, cleanSafehouses, readServerName, cleanGameTime, tilePaths, cacheTile, readCachedTile, createServer,
 } from "../server.js";
-import { prefetch } from "../prefetch.js";
+import { prefetch, parseFloors } from "../prefetch.js";
 import { TOWNS } from "../public/towns.js";
 import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, stepCamera, PAN_MS, clampFloor, floorLabel, parseFloor, assignColors, colorForName, safehouseCorners, PLAYER_COLORS, MIN_ZOOM } from "../public/projection.js";
 
@@ -350,6 +350,35 @@ test("prefetch downloads every rendered cell once and skips cached ones", async 
   } finally {
     host.close();
   }
+});
+
+test("prefetch: floors come from their own upstream layer and cache entries", async () => {
+  const hits = [];
+  const host = http.createServer((req, res) => {
+    hits.push(req.url);
+    if (/^\/42\.20\.0\/base\/layer(0|2|-1)_files\/12\/0_0\.jpg$/.test(req.url)) res.end(`T${req.url.match(/layer(-?\d)/)[1]}`);
+    else { res.statusCode = 404; res.end("nope"); }
+  });
+  const hostUrl = await listen(host);
+  const { cfg } = setup({ TILES_ROOT: hostUrl });
+  try {
+    const totals = await prefetch(cfg, 12, () => {}, [0, 2, -1, 5]);
+    assert.equal(totals.fetched, 3);
+    assert.equal(totals.failed, 0);
+    assert.equal(readCachedTile(cfg, "42.20.0/12/0_0.jpg").toString(), "T0");
+    assert.equal(readCachedTile(cfg, "42.20.0/f2/12/0_0.jpg").toString(), "T2");
+    assert.equal(readCachedTile(cfg, "42.20.0/f-1/12/0_0.jpg").toString(), "T-1");
+    assert.equal(readCachedTile(cfg, "42.20.0/f5/12/0_0.jpg"), null, "nothing rendered on floor 5");
+  } finally {
+    host.close();
+  }
+});
+
+test("parseFloors: default is ground only, all is every floor, junk is rejected", () => {
+  assert.deepEqual(parseFloors(undefined), [0]);
+  assert.deepEqual(parseFloors("all"), [0, -1, 1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(parseFloors("2, 0,2,-1"), [2, 0, -1]);
+  for (const bad of ["8", "-2", "x", "1.5", ""]) assert.throws(() => parseFloors(bad), /floors must be/, bad);
 });
 
 test("server: meta, players and tiles; 404 tiles stay empty and are not re-requested", async () => {
