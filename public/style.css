@@ -25,6 +25,8 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
 #safehouses { list-style: none; margin: 0; padding: 0; }
 #safehouses li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; cursor: pointer; border-bottom: 1px solid #ffffff14; }
 #safehouses small { color: var(--muted); text-align: right; }
+#mapOpts { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #ffffff14; }
+#mapOpts label { color: var(--muted); font-size: 12px; cursor: pointer; }
 #empty { color: var(--muted); margin: 8px 0; }
 #empty[hidden] { display: none; }
 #floors { position: fixed; left: 12px; top: calc(var(--bar-h, 48px) + 44px); display: flex; flex-direction: column; gap: 4px; }

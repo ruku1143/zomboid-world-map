@@ -1,4 +1,5 @@
 import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, stepCamera, PAN_MS, assignColors, colorForName, safehouseCorners, parseView, MIN_ZOOM, clampFloor, floorLabel, parseFloor, FLOOR_MIN, FLOOR_MAX } from "./projection.js";
+import { TOWNS } from "./towns.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("map");
@@ -14,6 +15,8 @@ let colors = new Map();
 let safehouses = [];
 let showSafehouses = true;
 try { showSafehouses = localStorage.getItem("zmap-safehouses") !== "0"; } catch {}
+let showTowns = true;
+try { showTowns = localStorage.getItem("zmap-towns") !== "0"; } catch {}
 const ownerColor = (h) => colors.get(h.owner) || colorForName(h.owner || h.title || "?");
 const cam = { x: 0, y: 0, scale: 0.001 }; // dzi px at screen centre, canvas px per dzi px
 // Where the camera is heading; `cam` eases toward it (see stepCamera). ax/ay: screen point a zoom is anchored on.
@@ -141,6 +144,7 @@ function draw() {
     }
   }
   if (showSafehouses) drawSafehouses();
+  if (showTowns) drawTowns();
   drawPlayers();
 }
 
@@ -176,6 +180,30 @@ function drawSafehouses() {
       ctx.fillText(label, cx, cy);
     }
   }
+  ctx.textAlign = "start";
+}
+
+// Town names show when zoomed out and fade away as you zoom in to street level.
+const TOWNS_FULL_ZOOM = 15.8, TOWNS_GONE_ZOOM = 16.8;
+function drawTowns() {
+  const alpha = Math.min(1, Math.max(0, (TOWNS_GONE_ZOOM - zoomForScale(cam.scale, meta.map)) / (TOWNS_GONE_ZOOM - TOWNS_FULL_ZOOM)));
+  if (alpha === 0) return;
+  ctx.font = "600 16px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = 4;
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "#12151a";
+  ctx.fillStyle = "#e6e9ee";
+  ctx.globalAlpha = alpha;
+  for (const t of TOWNS) {
+    const d = gameToDzi(t.x, t.y, meta.map);
+    const s = toScreen(d.x, d.y);
+    if (s.x < -100 || s.y < -20 || s.x > innerWidth + 100 || s.y > innerHeight + 20) continue;
+    ctx.strokeText(t.name, s.x, s.y);
+    ctx.fillText(t.name, s.x, s.y);
+  }
+  ctx.globalAlpha = 1;
   ctx.textAlign = "start";
 }
 
@@ -449,6 +477,13 @@ $("shShow").checked = showSafehouses;
 $("shShow").addEventListener("change", (e) => {
   showSafehouses = e.target.checked;
   try { localStorage.setItem("zmap-safehouses", showSafehouses ? "1" : "0"); } catch {}
+  redraw();
+});
+
+$("townsShow").checked = showTowns;
+$("townsShow").addEventListener("change", (e) => {
+  showTowns = e.target.checked;
+  try { localStorage.setItem("zmap-towns", showTowns ? "1" : "0"); } catch {}
   redraw();
 });
 

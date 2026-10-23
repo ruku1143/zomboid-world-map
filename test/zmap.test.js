@@ -9,6 +9,7 @@ import {
   readVersion, cleanSafehouses, readServerName, cleanGameTime, tilePaths, cacheTile, readCachedTile, createServer,
 } from "../server.js";
 import { prefetch } from "../prefetch.js";
+import { TOWNS } from "../public/towns.js";
 import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, stepCamera, PAN_MS, clampFloor, floorLabel, parseFloor, assignColors, colorForName, safehouseCorners, PLAYER_COLORS, MIN_ZOOM } from "../public/projection.js";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "zmap-"));
@@ -190,6 +191,16 @@ test("floor helpers clamp to -1..7, label floors and read the URL", () => {
   assert.equal(parseFloor("?floor=40"), 7);
   assert.equal(parseFloor("?floor=abc"), 0);
   assert.equal(parseFloor("?x=1"), 0);
+});
+
+test("town labels: unique names with positions that land on the rendered map", () => {
+  assert.ok(TOWNS.length >= 10);
+  assert.equal(new Set(TOWNS.map((t) => t.name)).size, TOWNS.length);
+  for (const t of TOWNS) {
+    assert.ok(t.name && Number.isFinite(t.x) && Number.isFinite(t.y), t.name);
+    const d = gameToDzi(t.x, t.y, MAP);
+    assert.ok(d.x > 0 && d.x < MAP.fullWidth && d.y > 0 && d.y < MAP.fullHeight, `${t.name} is inside the map image`);
+  }
 });
 
 test("parseView reads shareable URL params", () => {
