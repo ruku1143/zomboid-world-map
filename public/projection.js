@@ -1,4 +1,4 @@
-// Pure map math shared by the client and the tests (Build 41 isometric projection).
+// Pure map math shared by the client and the tests (the isometric projection Build 41 and 42 share).
 // "dzi" = pixel in the full-resolution Deep Zoom image.
 
 export function gameToDzi(gx, gy, m) {
@@ -21,7 +21,7 @@ export const zoomForScale = (scale, m) => Math.log2(scale) + m.maxLevel;
 
 // Coarsest tile level that is at least as sharp as the current scale.
 export function levelForScale(scale, m) {
-  return Math.min(m.renderedMaxLevel, Math.max(0, Math.ceil(zoomForScale(scale, m))));
+  return Math.min(m.maxLevel, Math.max(0, Math.ceil(zoomForScale(scale, m))));
 }
 
 // Size of one tile of `level` in full-resolution dzi pixels.
@@ -133,7 +133,7 @@ export function stepCamera(cam, goal, dt, vw, vh) {
 export const FLOOR_MIN = -1;
 export const FLOOR_MAX = 7;
 export const clampFloor = (f) => Math.max(FLOOR_MIN, Math.min(FLOOR_MAX, Math.round(Number(f)) || 0));
-export const floorLabel = (f) => (f === 0 ? "G" : f > 0 ? String(f) : `B${-f}`);
+export const floorLabel = (f) => (f === 0 ? "G" : f > 0 ? `F${f}` : `B${-f}`);
 export function parseFloor(search) {
   const raw = new URLSearchParams(search).get("floor");
   return raw === null || !Number.isFinite(Number(raw)) ? 0 : clampFloor(raw);

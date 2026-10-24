@@ -143,7 +143,7 @@ test("level and zoom helpers", () => {
   assert.equal(m.maxLevel, 22);
   assert.equal(scaleForZoom(m.maxLevel, m), 1);
   assert.equal(zoomForScale(scaleForZoom(14, m), m), 14);
-  assert.equal(levelForScale(1, m), m.renderedMaxLevel);
+  assert.equal(levelForScale(1, m), m.maxLevel);
   assert.equal(levelForScale(1e-9, m), 0);
   assert.equal(tileSpan(m.maxLevel, m), m.tileSize);
 });
@@ -186,7 +186,7 @@ test("tilePaths: ground floor keeps its cache layout, other floors get their own
 
 test("floor helpers clamp to -1..7, label floors and read the URL", () => {
   assert.deepEqual([clampFloor(-5), clampFloor(0), clampFloor(3.4), clampFloor(99), clampFloor("x"), clampFloor(undefined)], [-1, 0, 3, 7, 0, 0]);
-  assert.deepEqual([floorLabel(0), floorLabel(3), floorLabel(-1)], ["G", "3", "B1"]);
+  assert.deepEqual([floorLabel(0), floorLabel(3), floorLabel(-1)], ["G", "F3", "B1"]);
   assert.equal(parseFloor("?x=1&floor=2"), 2);
   assert.equal(parseFloor("?floor=40"), 7);
   assert.equal(parseFloor("?floor=abc"), 0);

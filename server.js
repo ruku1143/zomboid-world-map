@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { FLOOR_MIN, FLOOR_MAX } from "./public/projection.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TILES_ROOT = "https://tiles.pzmap.org";
@@ -34,7 +35,6 @@ export function mapFromDescriptors(dir, dzi, proj) {
     fullWidth: dzi.width,
     fullHeight: dzi.height,
     maxLevel,
-    renderedMaxLevel: maxLevel,
     isoX0: proj.x0 / proj.scale,
     isoY0: proj.y0 / proj.scale,
     isoHalfSqr: proj.sqr / 2 / proj.scale,
@@ -167,14 +167,17 @@ const majorOf = (v) => String(v).split(".")[0];
 // the full version would warn forever.
 export function readBuildInfo(cfg) {
   let version = null;
+  let fd;
   try {
-    const fd = fs.openSync(path.join(cfg.dataPath, "server-console.txt"), "r");
+    fd = fs.openSync(path.join(cfg.dataPath, "server-console.txt"), "r");
     const buf = Buffer.alloc(8192);
     const n = fs.readSync(fd, buf, 0, buf.length, 0);
-    fs.closeSync(fd);
     // Usually on the first line, but do not depend on it: take the first match near the top.
     version = (buf.toString("utf8", 0, n).match(/\bversion=(\d+\.\d+(?:\.\d+)?)/) || [])[1] || null;
-  } catch {}
+  } catch {
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
   return { version, supported: version === null ? null : majorOf(version) === majorOf(MAP.dir) };
 }
 
@@ -266,6 +269,8 @@ export function readCachedTile(cfg, rel) {
   }
 }
 
+export const hasCachedTile = (cfg, rel) => fs.existsSync(path.join(tilesDir(cfg), rel));
+
 // Node's fetch first; curl as a fallback because Cloudflare in front of the
 // tile host can reject Node's TLS fingerprint.
 export async function fetchUpstream(url) {
@@ -280,9 +285,6 @@ export async function fetchUpstream(url) {
   } catch {}
   return { status: 502 };
 }
-
-export const FLOOR_MIN = -1; // basement
-export const FLOOR_MAX = 7;
 
 // Cache path (rel) and upstream URL for a tile. Floor 0 keeps the original cache layout so tiles
 // cached before floors existed stay valid; other floors live under f<floor>/. Upstream names the
@@ -306,7 +308,17 @@ async function serveTile(cfg, floor, level, tile, res) {
   if (!body) {
     cache = "miss";
     if (!inflight.has(rel)) {
-      const p = fetchUpstream(upstream).finally(() => inflight.delete(rel));
+      // Cache inside the shared promise so concurrent misses write the tile once.
+      const p = fetchUpstream(upstream)
+        .then((r) => {
+          if (r.status === 200) {
+            try {
+              cacheTile(cfg, rel, r.body);
+            } catch {}
+          }
+          return r;
+        })
+        .finally(() => inflight.delete(rel));
       inflight.set(rel, p);
     }
     const r = await inflight.get(rel);
@@ -322,9 +334,6 @@ async function serveTile(cfg, floor, level, tile, res) {
       return res.end();
     }
     body = r.body;
-    try {
-      cacheTile(cfg, rel, body);
-    } catch {}
   }
   res.writeHead(200, {
     "Content-Type": "image/jpeg",

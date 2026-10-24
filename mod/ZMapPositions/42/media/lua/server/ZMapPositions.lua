@@ -17,13 +17,24 @@ local HIDE_INVISIBLE_ADMINS = true  -- leave invisible / ghost-mode admins off t
 local INTERVAL_MS = 2000
 local FILE_NAME = "zmap_players.txt"
 local lastWrite = 0
-local lastError = nil
-local lastShError = nil
-local lastTimeError = nil
+local lastErrors = {} -- label -> last message printed, so a repeating error is logged once
 
 local function nowMs()
     if getTimestampMs then return getTimestampMs() end
     return os.time() * 1000
+end
+
+-- Runs fn and returns its result, or fallback if it throws (logging each new error once).
+-- Keeps one broken game API from stopping the rest of the write.
+local function guarded(label, fallback, fn)
+    local ok, result = pcall(fn)
+    if ok then return result end
+    local msg = tostring(result)
+    if msg ~= lastErrors[label] then
+        lastErrors[label] = msg
+        print("[ZMapPositions] " .. label .. ": " .. msg)
+    end
+    return fallback
 end
 
 local function jsonString(s)
@@ -91,38 +102,28 @@ local function readHealth(p)
     return tostring(math.max(0, math.min(100, math.floor(hp))))
 end
 
+-- One player as JSON, or nil if they are dead, hidden or absent.
+local function playerJson(p)
+    if not p or p:isDead() or isHidden(p) then return nil end
+    return string.format('{"name":%s,"x":%d,"y":%d,"z":%d,"hp":%s,"car":%s}',
+        jsonString(p:getUsername()),
+        math.floor(p:getX()), math.floor(p:getY()), math.floor(p:getZ()), readHealth(p), readInVehicle(p))
+end
+
 local function writePositions()
     local players = getOnlinePlayers()
     local parts = {}
     if players then
         for i = 0, players:size() - 1 do
+            -- One player who can't be read (e.g. still connecting) must not hide everyone else.
             local p = players:get(i)
-            if p and not p:isDead() and not isHidden(p) then
-                table.insert(parts, string.format(
-                    '{"name":%s,"x":%d,"y":%d,"z":%d,"hp":%s,"car":%s}',
-                    jsonString(p:getUsername()),
-                    math.floor(p:getX()), math.floor(p:getY()), math.floor(p:getZ()), readHealth(p), readInVehicle(p)))
-            end
+            local entry = guarded("player skipped", nil, function() return playerJson(p) end)
+            if entry then table.insert(parts, entry) end
         end
     end
-    -- A safehouse API problem must not stop player positions from being written.
-    local okSh, safehouses = pcall(readSafehouses)
-    if not okSh then
-        if tostring(safehouses) ~= lastShError then
-            lastShError = tostring(safehouses)
-            print("[ZMapPositions] safehouses unavailable: " .. lastShError)
-        end
-        safehouses = {}
-    end
-    -- Likewise, a clock problem must not stop positions.
-    local okT, gameTime = pcall(readGameTime)
-    if not okT then
-        if tostring(gameTime) ~= lastTimeError then
-            lastTimeError = tostring(gameTime)
-            print("[ZMapPositions] game time unavailable: " .. lastTimeError)
-        end
-        gameTime = "null"
-    end
+    -- Neither a safehouse nor a clock problem may stop player positions from being written.
+    local safehouses = guarded("safehouses unavailable", {}, readSafehouses)
+    local gameTime = guarded("game time unavailable", "null", readGameTime)
     local writer = getFileWriter(FILE_NAME, true, false)
     if not writer then error("getFileWriter returned nil for " .. FILE_NAME) end
     writer:write(string.format('{"t":%d,"time":%s,"players":[%s],"safehouses":[%s]}',
@@ -134,11 +135,7 @@ local function onTick()
     local now = nowMs()
     if now - lastWrite < INTERVAL_MS then return end
     lastWrite = now
-    local ok, err = pcall(writePositions)
-    if not ok and tostring(err) ~= lastError then
-        lastError = tostring(err)
-        print("[ZMapPositions] write failed: " .. lastError)
-    end
+    guarded("write failed", nil, writePositions)
 end
 
 -- OnTickEvenPaused keeps writing when PauseEmpty has frozen the world (nobody online).
