@@ -14,13 +14,15 @@ let players = [];
 let colors = new Map();
 let safehouses = [];
 let showSafehouses = true;
-try { showSafehouses = localStorage.getItem("zmap-safehouses") !== "0"; } catch {}
 let showTowns = true;
-try { showTowns = localStorage.getItem("zmap-towns") !== "0"; } catch {}
+// Map colours, the same as --bg and --text in style.css.
+const BG = "#12151a";
+const TEXT = "#e6e9ee";
 const ownerColor = (h) => colors.get(h.owner) || colorForName(h.owner || h.title || "?");
 const cam = { x: 0, y: 0, scale: 0.001 }; // dzi px at screen centre, canvas px per dzi px
 // Where the camera is heading; `cam` eases toward it (see stepCamera). ax/ay: screen point a zoom is anchored on.
 const goal = { x: 0, y: 0, scale: 0.001, ax: null, ay: null };
+const playerLabel = (p) => (p.car ? `${p.name} 🚗` : p.name);
 const syncGoal = () => Object.assign(goal, { x: cam.x, y: cam.y, scale: cam.scale, ax: null, ay: null });
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let dirty = true;
@@ -126,7 +128,7 @@ const toScreen = (dx, dy) => ({ x: (dx - cam.x) * cam.scale + innerWidth / 2, y:
 const toDzi = (sx, sy) => ({ x: (sx - innerWidth / 2) / cam.scale + cam.x, y: (sy - innerHeight / 2) / cam.scale + cam.y });
 
 function draw() {
-  ctx.fillStyle = "#12151a";
+  ctx.fillStyle = BG;
   ctx.fillRect(0, 0, innerWidth, innerHeight);
   if (!meta) return;
   const m = meta.map;
@@ -146,6 +148,18 @@ function draw() {
   if (showSafehouses) drawSafehouses();
   if (showTowns) drawTowns();
   drawPlayers();
+}
+
+// Room for a label either side of a point before it counts as off screen.
+const offScreen = (s) => s.x < -100 || s.y < -20 || s.x > innerWidth + 100 || s.y > innerHeight + 20;
+
+// Text with a dark halo so it reads on any terrain. Uses the current font, alignment and alpha.
+function haloText(text, x, y, width, fill = TEXT) {
+  ctx.lineWidth = width;
+  ctx.strokeStyle = BG;
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = fill;
+  ctx.fillText(text, x, y);
 }
 
 function drawSafehouses() {
@@ -172,12 +186,7 @@ function drawSafehouses() {
     // Label only when the outline is big enough to hold it.
     if (maxX - minX > 70 && (h.owner || h.title)) {
       const label = h.owner || h.title;
-      const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "#12151a";
-      ctx.strokeText(label, cx, cy);
-      ctx.fillStyle = "#fff";
-      ctx.fillText(label, cx, cy);
+      haloText(label, (minX + maxX) / 2, (minY + maxY) / 2, 3, "#fff");
     }
   }
   ctx.textAlign = "start";
@@ -191,17 +200,12 @@ function drawTowns() {
   ctx.font = "600 16px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.lineWidth = 4;
   ctx.lineJoin = "round";
-  ctx.strokeStyle = "#12151a";
-  ctx.fillStyle = "#e6e9ee";
   ctx.globalAlpha = alpha;
   for (const t of TOWNS) {
     const d = gameToDzi(t.x, t.y, meta.map);
     const s = toScreen(d.x, d.y);
-    if (s.x < -100 || s.y < -20 || s.x > innerWidth + 100 || s.y > innerHeight + 20) continue;
-    ctx.strokeText(t.name, s.x, s.y);
-    ctx.fillText(t.name, s.x, s.y);
+    if (!offScreen(s)) haloText(t.name, s.x, s.y, 4);
   }
   ctx.globalAlpha = 1;
   ctx.textAlign = "start";
@@ -213,7 +217,7 @@ function drawPlayers() {
   for (const p of players) {
     const d = gameToDzi(p.dx, p.dy, meta.map);
     const s = toScreen(d.x, d.y);
-    if (s.x < -100 || s.y < -20 || s.x > innerWidth + 100 || s.y > innerHeight + 20) continue;
+    if (offScreen(s)) continue;
     // Players on another floor stay visible but faded.
     ctx.globalAlpha = clampFloor(p.z) === floor ? 1 : 0.4;
     // Same look as the list swatch (.swatch): colour disc, dark border, faint light outer ring.
@@ -224,26 +228,21 @@ function drawPlayers() {
     ctx.fill();
     ctx.beginPath();
     ctx.arc(s.x, s.y, R, 0, Math.PI * 2);
-    ctx.fillStyle = "#12151a";
+    ctx.fillStyle = BG;
     ctx.fill();
     ctx.beginPath();
     ctx.arc(s.x, s.y, R - 2, 0, Math.PI * 2);
     ctx.fillStyle = colors.get(p.name) || "#f2b134";
     ctx.fill();
-    if (p.hp !== null && p.hp !== undefined) {
+    if (p.hp != null) {
       // Small health bar under the dot: green to red.
       const w = 22, x = s.x - w / 2, y = s.y + 12;
-      ctx.fillStyle = "#12151a";
+      ctx.fillStyle = BG;
       ctx.fillRect(x - 1, y - 1, w + 2, 6);
       ctx.fillStyle = `hsl(${Math.round(p.hp * 1.2)}, 75%, 50%)`;
       ctx.fillRect(x, y, (w * p.hp) / 100, 4);
     }
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = "#12151a";
-    const label = p.car ? `${p.name} 🚗` : p.name;
-    ctx.strokeText(label, s.x + 14, s.y);
-    ctx.fillStyle = "#e6e9ee"; // --text
-    ctx.fillText(label, s.x + 14, s.y);
+    haloText(playerLabel(p), s.x + 14, s.y, 3);
   }
   ctx.globalAlpha = 1;
 }
@@ -414,6 +413,21 @@ function ago(ms) {
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const formatGameTime = (t) => `${MONTHS[t.mo - 1]} ${t.d}, ${t.y} · ${String(t.h).padStart(2, "0")}:${String(t.mi).padStart(2, "0")}`;
 
+// One row of the side panel: swatch and name on the left, details on the right.
+function listItem(color, label, detail, onClick) {
+  const li = document.createElement("li");
+  const name = document.createElement("span");
+  const swatch = document.createElement("i");
+  swatch.className = "swatch";
+  swatch.style.background = color;
+  name.append(swatch, label);
+  const sub = document.createElement("small");
+  sub.textContent = detail;
+  li.append(name, sub);
+  li.addEventListener("click", onClick);
+  return li;
+}
+
 function renderPlayers(data) {
   const prev = new Map(players.map((p) => [p.name, p]));
   players = data.players;
@@ -425,18 +439,9 @@ function renderPlayers(data) {
   colors = assignColors(players.map((p) => p.name));
   const list = $("players");
   list.replaceChildren(...players.map((p) => {
-    const li = document.createElement("li");
-    const name = document.createElement("span");
-    const swatch = document.createElement("i");
-    swatch.className = "swatch";
-    swatch.style.background = colors.get(p.name);
-    name.append(swatch, p.car ? `${p.name} 🚗` : p.name);
-    const sub = document.createElement("small");
     const z = clampFloor(p.z);
-    sub.textContent = `${p.hp == null ? "" : `${p.hp}% HP · `}${z ? `${z > 0 ? "F" : "B"}${Math.abs(z)} · ` : ""}${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
-    li.append(name, sub);
-    li.addEventListener("click", () => { centerOnGame(p.x, p.y); setFloor(clampFloor(p.z)); });
-    return li;
+    const detail = `${p.hp == null ? "" : `${p.hp}% HP · `}${z ? `${floorLabel(z)} · ` : ""}${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
+    return listItem(colors.get(p.name), playerLabel(p), detail, () => { centerOnGame(p.x, p.y); setFloor(z); });
   }));
   renderSafehouses(data.safehouses || []);
   $("clock").textContent = data.gameTime ? formatGameTime(data.gameTime) : "";
@@ -456,42 +461,37 @@ function renderPlayers(data) {
 function renderSafehouses(list) {
   safehouses = list;
   $("safehouses").replaceChildren(...list.map((h) => {
-    const li = document.createElement("li");
-    const name = document.createElement("span");
-    const swatch = document.createElement("i");
-    swatch.className = "swatch";
-    swatch.style.background = ownerColor(h);
-    name.append(swatch, h.owner || h.title || "Safehouse");
-    const sub = document.createElement("small");
     const others = h.members.filter((m) => m !== h.owner);
-    sub.textContent = others.length ? `+ ${others.join(", ")}` : `${h.w}x${h.h}`;
+    const li = listItem(ownerColor(h), h.owner || h.title || "Safehouse", others.length ? `+ ${others.join(", ")}` : `${h.w}x${h.h}`,
+      () => centerOnGame(h.x + h.w / 2, h.y + h.h / 2));
     li.title = `${h.title || "Safehouse"} · ${h.w}x${h.h} at ${h.x}, ${h.y}`;
-    li.append(name, sub);
-    li.addEventListener("click", () => centerOnGame(h.x + h.w / 2, h.y + h.h / 2));
     return li;
   }));
   $("shHead").hidden = list.length === 0;
 }
 
-$("shShow").checked = showSafehouses;
-$("shShow").addEventListener("change", (e) => {
-  showSafehouses = e.target.checked;
-  try { localStorage.setItem("zmap-safehouses", showSafehouses ? "1" : "0"); } catch {}
-  redraw();
-});
-
-$("townsShow").checked = showTowns;
-$("townsShow").addEventListener("change", (e) => {
-  showTowns = e.target.checked;
-  try { localStorage.setItem("zmap-towns", showTowns ? "1" : "0"); } catch {}
-  redraw();
-});
+// A checkbox whose state is remembered in localStorage (on unless it was turned off).
+function persistedToggle(id, key, set) {
+  let on = true;
+  try { on = localStorage.getItem(key) !== "0"; } catch {}
+  $(id).checked = on;
+  set(on);
+  $(id).addEventListener("change", (e) => {
+    set(e.target.checked);
+    try { localStorage.setItem(key, e.target.checked ? "1" : "0"); } catch {}
+    redraw();
+  });
+}
+persistedToggle("shShow", "zmap-safehouses", (on) => (showSafehouses = on));
+persistedToggle("townsShow", "zmap-towns", (on) => (showTowns = on));
 
 async function poll() {
   if (!document.hidden) {
     try {
       const res = await fetch("api/players", { cache: "no-store" });
-      if (res.ok) renderPlayers(await res.json());
+      const data = res.ok ? await res.json() : null;
+      // A half-written file: keep what is on screen and try again next poll.
+      if (data && !data.error) renderPlayers(data);
     } catch {
       $("status").textContent = "Connection lost, retrying…";
     }
@@ -511,7 +511,7 @@ async function init() {
   minScale = scaleForZoom(MIN_ZOOM, meta.map);
   tileVersion = `${meta.map.dir}-${meta.map.tileSize}`;
   document.title = `${meta.serverName} Map`;
-  $("version").textContent = ["v" + meta.app?.version, meta.app?.commit].filter((x) => x && x !== "vundefined" && x !== "vnull").join(" · ");
+  $("version").textContent = [meta.app?.version && `v${meta.app.version}`, meta.app?.commit].filter(Boolean).join(" · ");
   $("title").textContent = meta.serverName;
   if (meta.build.supported === false) banner(`Game version ${meta.build.version} is a different build than the map (Build ${meta.map.dir.split(".")[0]}). The map may not match this world.`);
   floor = parseFloor(location.search);

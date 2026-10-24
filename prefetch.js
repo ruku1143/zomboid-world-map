@@ -6,8 +6,8 @@
 // tiles already on disk are skipped.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig, MAP as map, fetchUpstream, cacheTile, readCachedTile, tilePaths, FLOOR_MIN, FLOOR_MAX } from "./server.js";
-import { tileSpan } from "./public/projection.js";
+import { loadConfig, MAP as map, fetchUpstream, cacheTile, hasCachedTile, tilePaths } from "./server.js";
+import { tileSpan, FLOOR_MIN, FLOOR_MAX } from "./public/projection.js";
 
 const CONCURRENCY = 4;
 const RETRIES = 2;
@@ -39,7 +39,7 @@ export async function prefetch(cfg, maxLevel, log = console.log, floors = [0]) {
       while (next < jobs.length) {
         const tile = jobs[next++];
         const { rel, upstream } = tilePaths(cfg, floor, level, tile);
-        if (readCachedTile(cfg, rel)) { totals.cached++; continue; }
+        if (hasCachedTile(cfg, rel)) { totals.cached++; continue; }
         let r = { status: 502 };
         for (let attempt = 0; attempt <= RETRIES && r.status !== 200 && r.status !== 404; attempt++) {
           r = await fetchUpstream(upstream);
