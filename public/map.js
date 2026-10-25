@@ -22,7 +22,11 @@ const ownerColor = (h) => colors.get(h.owner) || colorForName(h.owner || h.title
 const cam = { x: 0, y: 0, scale: 0.001 }; // dzi px at screen centre, canvas px per dzi px
 // Where the camera is heading; `cam` eases toward it (see stepCamera). ax/ay: screen point a zoom is anchored on.
 const goal = { x: 0, y: 0, scale: 0.001, ax: null, ay: null };
-const playerLabel = (p) => (p.car ? `${p.name} 🚗` : p.name);
+// ⬆️/⬇️: the player is on a floor above/below the one being viewed.
+const playerLabel = (p) => {
+  const z = clampFloor(p.z);
+  return p.name + (z > floor ? " ⬆️" : z < floor ? " ⬇️" : "") + (p.car ? " 🚗" : "");
+};
 const syncGoal = () => Object.assign(goal, { x: cam.x, y: cam.y, scale: cam.scale, ax: null, ay: null });
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let dirty = true;
@@ -389,6 +393,7 @@ function setFloor(next) {
   for (const key of queue.splice(0)) tiles.delete(key);
   floor = next;
   updateFloorUi();
+  if (lastPlayers) renderPlayers(lastPlayers); // refreshes the ⬆️/⬇️ markers
   redraw();
   syncUrl();
 }
@@ -428,7 +433,9 @@ function listItem(color, label, detail, onClick) {
   return li;
 }
 
+let lastPlayers = null;
 function renderPlayers(data) {
+  lastPlayers = data;
   const prev = new Map(players.map((p) => [p.name, p]));
   players = data.players;
   for (const p of players) {
