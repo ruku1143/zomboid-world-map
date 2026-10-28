@@ -7,6 +7,11 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 #map { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 #map.drag { cursor: grabbing; }
 #bar { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: 12px; align-items: center; padding: 8px 16px; padding-top: max(8px, env(safe-area-inset-top)); background: var(--panel); }
+#state:empty { display: none; }
+.pill { font-size: 12px; padding: 2px 10px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.pill.online { color: #3fb950; }
+.pill.offline { color: var(--warn); }
+.pill.unknown { color: var(--accent); }
 #status { color: var(--muted); flex: 1; font-size: 13px; }
 #clock { color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #clock:empty { display: none; }
@@ -49,6 +54,7 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
   /* Row 1: title, clock, Players button. Row 2: the status text, on its own line. */
   #bar { flex-wrap: wrap; gap: 2px 12px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); }
   #title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #state { order: 2; }
   #status { order: 3; flex: 1 1 100%; }
   #version { display: none; }
 }
