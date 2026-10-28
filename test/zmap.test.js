@@ -5,7 +5,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import {
-  MAP, mapFromDescriptors, loadConfig, readPlayers, readBuildInfo,
+  MAP, mapFromDescriptors, loadConfig, readPlayers, cleanDead, readBuildInfo,
   readVersion, cleanSafehouses, readServerName, cleanGameTime, tilePaths, cacheTile, readCachedTile, createServer,
 } from "../server.js";
 import { prefetch, parseFloors } from "../prefetch.js";
@@ -436,3 +436,34 @@ test("server: meta, players and tiles; 404 tiles stay empty and are not re-reque
   }
 });
 
+
+test("readPlayers: deaths are remembered until the same name is alive again", () => {
+  const { cfg, dataPath } = setup();
+  cfg.stateFile = path.join(dataPath, "dead.json");
+  const file = path.join(dataPath, "Lua", "zmap_players.txt");
+  const write = (o) => fs.writeFileSync(file, JSON.stringify({ t: 1, ...o }));
+  write({ players: [], dead: [{ name: "Bob", x: 10, y: 20, z: 1 }, { name: 5 }, { name: "Eve", x: "no", y: 1 }] });
+  let r = readPlayers(cfg);
+  assert.deepEqual(r.dead.map((d) => [d.name, d.x, d.y, d.z]), [["Bob", 10, 20, 1]], "junk entries are dropped");
+  write({ players: [], dead: [] });
+  assert.equal(readPlayers(cfg).dead.length, 1, "the mod forgetting a death doesn't clear it");
+  assert.equal(readPlayers(cfg, Date.now() + 60_000).dead.length, 1, "kept while the file is stale");
+  assert.equal(JSON.parse(fs.readFileSync(cfg.stateFile, "utf8"))[0].name, "Bob", "saved to disk");
+  write({ players: [{ name: "Bob", x: 1, y: 1, z: 0 }], dead: [] });
+  assert.deepEqual(readPlayers(cfg).dead, [], "alive again clears the marker");
+  assert.deepEqual(JSON.parse(fs.readFileSync(cfg.stateFile, "utf8")), []);
+});
+
+test("readPlayers: dead markers expire after DEAD_KEEP_HOURS and survive a restart", () => {
+  const { cfg, dataPath } = setup();
+  cfg.stateFile = path.join(dataPath, "dead.json");
+  cfg.deadKeepHours = 1;
+  const file = path.join(dataPath, "Lua", "zmap_players.txt");
+  const now = Date.now();
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [], dead: [{ name: "Bob", x: 1, y: 2, z: 0 }] }));
+  assert.equal(readPlayers(cfg, now).dead.length, 1);
+  assert.equal(readPlayers({ ...cfg, stateFile: cfg.stateFile }, now + 30 * 60_000).dead.length, 1);
+  fs.utimesSync(file, new Date(now + 2 * 3600_000), new Date(now + 2 * 3600_000));
+  assert.deepEqual(readPlayers(cfg, now + 2 * 3600_000).dead, [], "expired");
+  assert.deepEqual(cleanDead("x"), []);
+});
