@@ -16,7 +16,7 @@ local SHOW_IN_VEHICLE = true        -- a car icon next to players who are drivin
 local HIDE_INVISIBLE_ADMINS = true  -- leave invisible / ghost-mode admins off the map
 local SHOW_DEATHS = true            -- keep a greyed-out marker where a player died, until they respawn
 
-local INTERVAL_MS = 2000
+local INTERVAL_MS = 1000
 local FILE_NAME = "zmap_players.txt"
 local lastWrite = 0
 local lastErrors = {} -- label -> last message printed, so a repeating error is logged once

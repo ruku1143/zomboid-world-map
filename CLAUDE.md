@@ -4,7 +4,7 @@ Read-only live world map for a Project Zomboid **Build 42** dedicated server. Ze
 
 ## How it fits together
 ```
-game server ──(Lua mod, every 2 s)──> <Zomboid data>/Lua/zmap_players.txt
+game server ──(Lua mod, every 1 s)──> <Zomboid data>/Lua/zmap_players.txt
                                              │ read + sanitised
 browser <──/api/players, /api/meta, /tiles/*── server.js ──(curl, cached on disk)──> tiles.pzmap.org
 ```

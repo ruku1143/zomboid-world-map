@@ -10,7 +10,7 @@ import { FLOOR_MIN, FLOOR_MAX } from "./public/projection.js";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TILES_ROOT = "https://tiles.pzmap.org";
 const USER_AGENT = "zomboid-world-map/1.0 (+https://github.com/ruku1143/zomboid-world-map)";
-const MOD_INTERVAL_SECONDS = 2; // ZMapPositions.lua write interval
+const MOD_INTERVAL_SECONDS = 1; // ZMapPositions.lua write interval
 const POSITIONS_FILE = "zmap_players.txt"; // B42 only lets Lua write .txt
 const NEGATIVE_TTL_MS = 60 * 60 * 1000;
 const NEGATIVE_MAX = 20000;

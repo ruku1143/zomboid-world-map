@@ -2,7 +2,7 @@
 
 A small read-only web map showing connected players on a Project Zomboid **Build 42** dedicated server. Zero npm dependencies: one Node file, a vanilla JS canvas client and a tiny server-side Lua mod. Forked from [fpsacha/zomboid-control-panel](https://github.com/fpsacha/zomboid-control-panel), see [CHANGES.md](CHANGES.md) and [DISCOVERY.md](DISCOVERY.md).
 
-How it works: the mod writes online players to `<Zomboid data>/Lua/zmap_players.txt` every 2 s (Build 42 only lets mods write `.txt` files, so the JSON lives in a `.txt`); `server.js` serves that file, proxies and caches the map tiles from `tiles.pzmap.org` (the 42.20.0 render, the newest published), and serves the page.
+How it works: the mod writes online players to `<Zomboid data>/Lua/zmap_players.txt` every 1 s (Build 42 only lets mods write `.txt` files, so the JSON lives in a `.txt`); `server.js` serves that file, proxies and caches the map tiles from `tiles.pzmap.org` (the 42.20.0 render, the newest published), and serves the page.
 
 ## Requirements
 - Node.js 20 or newer (Ubuntu's apt Node is often older: use NodeSource or nvm).
@@ -123,7 +123,7 @@ All via environment variables in `/etc/zmap.env`, see [deploy/zmap.env.example](
 - Safehouses: each claimed safehouse is outlined in its owner's colour, labelled with the owner when zoomed in, and listed in the panel with its members (click to centre). Use the checkbox in the panel to hide the outlines; the choice is remembered in the browser. Their locations are visible to anyone who can open the map.
 - Floors: the buttons at the top left switch between the basement (`B1`), the ground floor (`G`) and floors 1 to 7 (`F1` to `F7`), which load that floor's tiles from the tile host. Click the middle button to jump back to ground. Players on another floor are drawn faded and tagged in the list (`F2`, `B1`); clicking one switches to their floor. The floor is part of the shared URL (`&floor=2`). Upper floors only have tiles where the host rendered something.
 - Town names: shown when zoomed out and fading away as you zoom in. Untick "Town names" in the panel to hide them (remembered in the browser). The list is in `public/towns.js`.
-- Update interval: the mod writes positions every 2 s and the page polls every `REFRESH_SECONDS` (default 5 s), so a marker is at most about 7 s behind the game.
+- Update interval: the mod writes positions every 1 s and the page polls every `REFRESH_SECONDS` (default 5 s; the example env file sets 1), so a marker is at most about 2 s behind the game with `REFRESH_SECONDS=1`, about 6 s with the default.
 - Share a view: `/?x=10800&y=10000&zoom=14` (`zoom` is the Deep Zoom level, 12.1 to 22; zooming out further is blocked).
 - If the server stops or the mod stops writing for 3 intervals, the map shows nobody online and an offline notice.
 
