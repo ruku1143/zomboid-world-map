@@ -11,6 +11,7 @@ const MAX_LOADS = 8;
 
 let meta = null;
 let players = [];
+let offline = false; // the game server looks stopped: dim the map
 let dead = []; // players who died and haven't respawned: greyed out where they fell
 const DEAD_COLOR = "#7b8088";
 let colors = new Map();
@@ -154,6 +155,10 @@ function draw() {
   if (showSafehouses) drawSafehouses();
   if (showTowns) drawTowns();
   drawPlayers();
+  if (offline) {
+    ctx.fillStyle = "rgba(18,21,26,0.45)";
+    ctx.fillRect(0, 0, innerWidth, innerHeight);
+  }
 }
 
 // Room for a label either side of a point before it counts as off screen.
@@ -441,7 +446,9 @@ function centerOnGame(gx, gy) {
 // ---- players --------------------------------------------------------------
 function ago(ms) {
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
-  return s < 60 ? `${s}s ago` : `${Math.round(s / 60)}m ago`;
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  return m < 120 ? `${m}m ago` : m < 2880 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -460,6 +467,14 @@ function listItem(color, label, detail, onClick) {
   li.append(name, sub);
   li.addEventListener("click", onClick);
   return li;
+}
+
+function setState(kind, text) {
+  const el = $("state");
+  el.className = `pill ${kind}`;
+  el.textContent = text;
+  const off = kind === "offline";
+  if (off !== offline) { offline = off; redraw(); }
 }
 
 let lastPlayers = null;
@@ -492,12 +507,16 @@ function renderPlayers(data) {
   const note = data.reason === "no-file"
     ? "Positions file not found. Is the ZMapPositions mod loaded?"
     : data.reason === "stale"
-      ? `No update for ${data.ageSeconds}s. The server may be stopped.`
+      ? `Last update ${ago(data.updatedAt)}. The server may be stopped.`
       : "Nobody is online.";
   $("empty").textContent = note;
   $("status").textContent = data.stale
     ? note
     : `${players.length} online · updated ${ago(data.updatedAt)}`;
+  // updatedAt is the positions file's mtime, so "last seen" survives a web-server restart.
+  if (data.reason === "no-file") setState("unknown", "No data");
+  else if (data.stale) setState("offline", "Offline");
+  else setState("online", "Online");
   redraw();
 }
 
@@ -537,6 +556,7 @@ async function poll() {
       if (data && !data.error) renderPlayers(data);
     } catch {
       $("status").textContent = "Connection lost, retrying…";
+      setState("unknown", "Unknown");
     }
   }
   setTimeout(poll, meta.refreshSeconds * 1000);
