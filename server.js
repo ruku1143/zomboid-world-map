@@ -54,6 +54,9 @@ export function loadConfig(env = process.env) {
     tileCacheDir: env.TILE_CACHE_DIR || path.join(HERE, "tile-cache"),
     tileCacheMaxBytes: num(env.TILE_CACHE_MAX_MB, 1024) * 1024 * 1024,
     tilesRoot: env.TILES_ROOT || TILES_ROOT,
+    // Where dead players are remembered across restarts, and how long their marker stays (0 = until they respawn).
+    stateFile: env.STATE_FILE || path.join(HERE, "dead-players.json"),
+    deadKeepHours: Number.isFinite(Number(env.DEAD_KEEP_HOURS)) && Number(env.DEAD_KEEP_HOURS) > 0 ? Number(env.DEAD_KEEP_HOURS) : 0,
   };
 }
 
@@ -125,6 +128,50 @@ export function cleanSafehouses(raw) {
     }));
 }
 
+// ---- dead players: the mod reports a death while it knows of one, the server keeps it ----
+const DEAD_MAX = 200;
+const deadStore = new Map(); // state file -> Map(name -> {name, x, y, z, diedAt})
+
+export function cleanDead(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((d) => d && typeof d.name === "string" && Number.isFinite(d.x) && Number.isFinite(d.y))
+    .slice(0, DEAD_MAX)
+    .map((d) => ({ name: d.name.slice(0, 64), x: d.x, y: d.y, z: Number.isFinite(d.z) ? d.z : 0 }));
+}
+
+function loadDead(cfg) {
+  let m = deadStore.get(cfg.stateFile);
+  if (m) return m;
+  m = new Map();
+  try {
+    const saved = JSON.parse(fs.readFileSync(cfg.stateFile, "utf8"));
+    if (Array.isArray(saved)) for (const d of saved) {
+      const [c] = cleanDead([d]);
+      if (c) m.set(c.name, { ...c, diedAt: Number.isFinite(d.diedAt) ? d.diedAt : Date.now() });
+    }
+  } catch {}
+  deadStore.set(cfg.stateFile, m);
+  return m;
+}
+
+// Adds new deaths, drops anyone alive again or expired, saves if anything changed.
+// `reported` is null when the mod's file couldn't be read: then only expiry applies.
+function updateDead(cfg, reported, alive, now) {
+  const m = loadDead(cfg);
+  let changed = false;
+  for (const d of reported || []) {
+    if (!m.has(d.name) && !alive.has(d.name) && m.size < DEAD_MAX) { m.set(d.name, { ...d, diedAt: now }); changed = true; }
+  }
+  for (const [name, d] of m) {
+    if (alive.has(name) || (cfg.deadKeepHours && now - d.diedAt > cfg.deadKeepHours * 3600_000)) { m.delete(name); changed = true; }
+  }
+  if (changed) {
+    try { fs.writeFileSync(cfg.stateFile, JSON.stringify([...m.values()])); } catch (e) { console.error("zmap: could not save", cfg.stateFile, e.message); }
+  }
+  return [...m.values()];
+}
+
 // ---- positions ------------------------------------------------------------
 
 export function readPlayers(cfg, now = Date.now()) {
@@ -133,7 +180,7 @@ export function readPlayers(cfg, now = Date.now()) {
   try {
     stat = fs.statSync(file);
   } catch {
-    return { available: false, stale: true, reason: "no-file", updatedAt: null, players: [], safehouses: [], gameTime: null };
+    return { available: false, stale: true, reason: "no-file", updatedAt: null, players: [], dead: [...loadDead(cfg).values()], safehouses: [], gameTime: null };
   }
   const ageMs = now - stat.mtimeMs;
   const staleAfterMs = Math.max(cfg.refreshSeconds, MOD_INTERVAL_SECONDS) * 3000;
@@ -142,20 +189,24 @@ export function readPlayers(cfg, now = Date.now()) {
   let players = [];
   let safehouses = [];
   let gameTime = null;
+  let reportedDead = [];
   try {
     const data = JSON.parse(fs.readFileSync(file, "utf8"));
     safehouses = cleanSafehouses(data.safehouses);
     gameTime = cleanGameTime(data.time);
+    reportedDead = cleanDead(data.dead);
     players = (Array.isArray(data.players) ? data.players : [])
       .filter((p) => p && typeof p.name === "string" && Number.isFinite(p.x) && Number.isFinite(p.y))
       .map((p) => ({ name: p.name, x: p.x, y: p.y, z: Number.isFinite(p.z) ? p.z : 0, hp: Number.isFinite(p.hp) ? Math.max(0, Math.min(100, Math.round(p.hp))) : null, car: typeof p.car === "boolean" ? p.car : null }));
   } catch {
     // Mid-write read; the client keeps its last good state and retries.
-    return { ...base, players: [], safehouses: [], gameTime: null, error: "unreadable" };
+    return { ...base, players: [], dead: [...loadDead(cfg).values()], safehouses: [], gameTime: null, error: "unreadable" };
   }
+  // A stale file says nothing new about deaths or respawns; the remembered ones stay.
+  const dead = stale ? [...loadDead(cfg).values()] : updateDead(cfg, reportedDead, new Set(players.map((p) => p.name)), now);
   // A stale file means the server (or mod) stopped: nobody is shown as online and the clock is
   // hidden (it would be frozen). Safehouses are persistent, so the last known ones stay on the map.
-  return { ...base, players: stale ? [] : players, safehouses, gameTime: stale ? null : gameTime };
+  return { ...base, players: stale ? [] : players, dead, safehouses, gameTime: stale ? null : gameTime };
 }
 
 // ---- game version ---------------------------------------------------------

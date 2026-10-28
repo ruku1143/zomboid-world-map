@@ -1,7 +1,8 @@
 -- ZMapPositions (Build 42, server side): writes living, connected players, the
 -- server's safehouses and the in-game time to <Zomboid>/Lua/zmap_players.txt every INTERVAL_MS. Write-only:
--- reads no commands and changes nothing in the game. Players that disconnect or die
--- are simply absent from the next write, as are invisible/ghost-mode admins.
+-- reads no commands and changes nothing in the game. Players that disconnect are simply
+-- absent from the next write, as are invisible/ghost-mode admins. Players that die are
+-- listed under "dead" (where they died) until the same username is alive again.
 --
 -- Build 42 getFileWriter only accepts a small extension whitelist (.txt is fine,
 -- .json is rejected and returns nil) and Lua cannot create folders, so the JSON
@@ -13,11 +14,14 @@ local SHOW_HEALTH = true            -- each player's health bar and % on the map
 local SHOW_GAME_TIME = true         -- the in-game date and time in the top bar
 local SHOW_IN_VEHICLE = true        -- a car icon next to players who are driving or riding
 local HIDE_INVISIBLE_ADMINS = true  -- leave invisible / ghost-mode admins off the map
+local SHOW_DEATHS = true            -- keep a greyed-out marker where a player died, until they respawn
 
 local INTERVAL_MS = 2000
 local FILE_NAME = "zmap_players.txt"
 local lastWrite = 0
 local lastErrors = {} -- label -> last message printed, so a repeating error is logged once
+local lastSeen = {} -- username -> {x, y, z} of the last living write, for deaths we only notice afterwards
+local dead = {}     -- username -> {x, y, z} where they died; cleared when they are alive again
 
 local function nowMs()
     if getTimestampMs then return getTimestampMs() end
@@ -102,9 +106,33 @@ local function readHealth(p)
     return tostring(math.max(0, math.min(100, math.floor(hp))))
 end
 
+local function deadJson(name, pos)
+    return string.format('{"name":%s,"x":%d,"y":%d,"z":%d}', jsonString(name), pos.x, pos.y, pos.z)
+end
+
+-- Remembers where a player died. Position comes from the player if readable, else the last living write.
+local function markDead(p)
+    if not SHOW_DEATHS or not p or isHidden(p) then return end
+    local name = p:getUsername()
+    if not name or dead[name] then return end
+    local ok, pos = pcall(function()
+        return { x = math.floor(p:getX()), y = math.floor(p:getY()), z = math.floor(p:getZ()) }
+    end)
+    dead[name] = (ok and pos) or lastSeen[name]
+end
+
 -- One player as JSON, or nil if they are dead, hidden or absent.
 local function playerJson(p)
-    if not p or p:isDead() or isHidden(p) then return nil end
+    if not p then return nil end
+    if p:isDead() then
+        markDead(p)
+        return nil
+    end
+    if isHidden(p) then return nil end
+    local name = p:getUsername()
+    -- Alive again (a new character): the old death marker goes.
+    dead[name] = nil
+    lastSeen[name] = { x = math.floor(p:getX()), y = math.floor(p:getY()), z = math.floor(p:getZ()) }
     return string.format('{"name":%s,"x":%d,"y":%d,"z":%d,"hp":%s,"car":%s}',
         jsonString(p:getUsername()),
         math.floor(p:getX()), math.floor(p:getY()), math.floor(p:getZ()), readHealth(p), readInVehicle(p))
@@ -122,12 +150,16 @@ local function writePositions()
         end
     end
     -- Neither a safehouse nor a clock problem may stop player positions from being written.
+    local deadParts = {}
+    for name, pos in pairs(dead) do
+        if pos then table.insert(deadParts, deadJson(name, pos)) end
+    end
     local safehouses = guarded("safehouses unavailable", {}, readSafehouses)
     local gameTime = guarded("game time unavailable", "null", readGameTime)
     local writer = getFileWriter(FILE_NAME, true, false)
     if not writer then error("getFileWriter returned nil for " .. FILE_NAME) end
-    writer:write(string.format('{"t":%d,"time":%s,"players":[%s],"safehouses":[%s]}',
-        math.floor(nowMs() / 1000), gameTime, table.concat(parts, ","), table.concat(safehouses, ",")))
+    writer:write(string.format('{"t":%d,"time":%s,"players":[%s],"dead":[%s],"safehouses":[%s]}',
+        math.floor(nowMs() / 1000), gameTime, table.concat(parts, ","), table.concat(deadParts, ","), table.concat(safehouses, ",")))
     writer:close()
 end
 
@@ -136,6 +168,13 @@ local function onTick()
     if now - lastWrite < INTERVAL_MS then return end
     lastWrite = now
     guarded("write failed", nil, writePositions)
+end
+
+-- A player can leave the online list the moment they die, before a write sees isDead(). The
+-- death event catches that case. Not every build fires it on the server; the isDead() check
+-- in playerJson is the fallback.
+if Events.OnPlayerDeath and Events.OnPlayerDeath.Add then
+    Events.OnPlayerDeath.Add(function(p) guarded("death event", nil, function() markDead(p) end) end)
 end
 
 -- OnTickEvenPaused keeps writing when PauseEmpty has frozen the world (nobody online).

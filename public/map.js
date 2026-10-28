@@ -11,6 +11,8 @@ const MAX_LOADS = 8;
 
 let meta = null;
 let players = [];
+let dead = []; // players who died and haven't respawned: greyed out where they fell
+const DEAD_COLOR = "#7b8088";
 let colors = new Map();
 let safehouses = [];
 let showSafehouses = true;
@@ -218,6 +220,33 @@ function drawTowns() {
 function drawPlayers() {
   ctx.font = "14px system-ui, sans-serif"; // same as the player list
   ctx.textBaseline = "middle";
+  for (const p of dead) {
+    const d = gameToDzi(p.x, p.y, meta.map);
+    const s = toScreen(d.x, d.y);
+    if (offScreen(s)) continue;
+    ctx.globalAlpha = clampFloor(p.z) === floor ? 0.7 : 0.3;
+    // Same disc as a living player, but grey with a cross.
+    const R = 7;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, R + 1.4, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, R, 0, Math.PI * 2);
+    ctx.fillStyle = BG;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, R - 2, 0, Math.PI * 2);
+    ctx.fillStyle = DEAD_COLOR;
+    ctx.fill();
+    ctx.strokeStyle = BG;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(s.x - 2.5, s.y - 2.5); ctx.lineTo(s.x + 2.5, s.y + 2.5);
+    ctx.moveTo(s.x + 2.5, s.y - 2.5); ctx.lineTo(s.x - 2.5, s.y + 2.5);
+    ctx.stroke();
+    haloText(`${p.name} (dead)`, s.x + 14, s.y, 3);
+  }
   for (const p of players) {
     const d = gameToDzi(p.dx, p.dy, meta.map);
     const s = toScreen(d.x, d.y);
@@ -443,16 +472,23 @@ function renderPlayers(data) {
     p.dx = old ? old.dx : p.x;
     p.dy = old ? old.dy : p.y;
   }
+  dead = (data.dead || []).filter((d) => !players.some((p) => p.name === d.name));
   colors = assignColors(players.map((p) => p.name));
   const list = $("players");
+  const deadRows = dead.map((d) => {
+    const z = clampFloor(d.z);
+    const li = listItem(DEAD_COLOR, `${d.name} (dead)`, `${z ? `${floorLabel(z)} · ` : ""}${d.x}, ${d.y} · ${ago(d.diedAt)}`, () => { centerOnGame(d.x, d.y); setFloor(z); });
+    li.classList.add("dead");
+    return li;
+  });
   list.replaceChildren(...players.map((p) => {
     const z = clampFloor(p.z);
     const detail = `${p.hp == null ? "" : `${p.hp}% HP · `}${z ? `${floorLabel(z)} · ` : ""}${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
     return listItem(colors.get(p.name), playerLabel(p), detail, () => { centerOnGame(p.x, p.y); setFloor(z); });
-  }));
+  }), ...deadRows);
   renderSafehouses(data.safehouses || []);
   $("clock").textContent = data.gameTime ? formatGameTime(data.gameTime) : "";
-  $("empty").hidden = players.length > 0;
+  $("empty").hidden = players.length + dead.length > 0;
   const note = data.reason === "no-file"
     ? "Positions file not found. Is the ZMapPositions mod loaded?"
     : data.reason === "stale"

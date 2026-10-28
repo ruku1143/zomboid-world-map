@@ -4,3 +4,4 @@ node_modules/
 !zmap.env.example
 tile-cache/
 *.log
+dead-players.json
