@@ -264,9 +264,9 @@ function drawPois() {
   ctx.globalAlpha = 1;
 }
 
-// 0..1, eased in and out over GLOW_MS; a fixed middle value when motion is reduced.
-const GLOW_MS = 2400;
-let pulse = 0.5;
+// Progress 0..1 of the current ping (one every PING_MS); -1 (no ring) when motion is reduced.
+const PING_MS = 2000;
+let ping = -1;
 
 function drawPlayers() {
   ctx.font = "14px system-ui, sans-serif"; // same as the player list
@@ -307,19 +307,18 @@ function drawPlayers() {
     ctx.globalAlpha = fade;
     // Same look as the list swatch (.swatch): colour disc, dark border, faint light outer ring.
     const R = 7;
-    // A slow pulsing glow in the player's colour, so living players stand out from the static POI dots.
-    const color = colors.get(p.name) || "#f2b134";
-    const glowR = R + 10 + 10 * pulse;
-    const glow = ctx.createRadialGradient(s.x, s.y, R - 2, s.x, s.y, glowR);
-    glow.addColorStop(0, color);
-    glow.addColorStop(0.45, color + "88");
-    glow.addColorStop(1, color + "00");
-    ctx.globalAlpha = fade * (0.6 + 0.4 * pulse);
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, glowR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = fade;
+    // A sonar ping in the player's colour: a ring that shoots out from the dot and fades, so living players
+    // stand out from the static POI dots. Skipped when motion is reduced.
+    if (ping >= 0) {
+      const out = 1 - (1 - ping) ** 3; // fast at first, slowing as it fades
+      ctx.globalAlpha = fade * (1 - ping) * 0.9;
+      ctx.strokeStyle = colors.get(p.name) || "#f2b134";
+      ctx.lineWidth = 2.5 * (1 - ping) + 0.5;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, R + 1.4 + 20 * out, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = fade;
+    }
     ctx.beginPath();
     ctx.arc(s.x, s.y, R + 1.4, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(255,255,255,0.25)";
@@ -348,7 +347,7 @@ function drawPlayers() {
 // Ease each player's displayed position toward its latest reported one.
 const GLIDE_MS = 300; // time constant of the glide
 const SNAP_TILES = 500; // farther than this is a teleport/respawn: jump instead of gliding
-let lastFrame = 0, lastGlow = 0;
+let lastFrame = 0, lastPing = 0;
 function glidePlayers(dt) {
   const k = 1 - Math.exp(-dt / GLIDE_MS);
   for (const p of players) {
@@ -368,9 +367,9 @@ function loop(now) {
   lastFrame = now;
   glidePlayers(dt);
   if (!reduceMotion && players.length) {
-    pulse = 0.5 - 0.5 * Math.cos((now / GLOW_MS) * Math.PI * 2);
-    // ~30 fps is plenty for a slow glow and keeps an idle page cheap.
-    if (now - lastGlow >= 33) { lastGlow = now; dirty = true; }
+    ping = (now % PING_MS) / PING_MS;
+    // ~30 fps is plenty for the ring and keeps an idle page cheap.
+    if (now - lastPing >= 33) { lastPing = now; dirty = true; }
   }
   if (meta && (cam.x !== goal.x || cam.y !== goal.y || cam.scale !== goal.scale)) {
     stepCamera(cam, goal, reduceMotion ? Infinity : dt, innerWidth, innerHeight);
