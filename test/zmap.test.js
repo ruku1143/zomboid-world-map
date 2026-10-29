@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  MAP, mapFromDescriptors, loadConfig, readPlayers, cleanDead, readBuildInfo,
+  MAP, mapFromDescriptors, loadConfig, readPlayers, cleanDead, cleanNames, readBuildInfo,
   readVersion, cleanSafehouses, readServerName, cleanGameTime, tilePaths, cacheTile, readCachedTile, createServer,
 } from "../server.js";
 import { prefetch, parseFloors } from "../prefetch.js";
@@ -529,4 +529,60 @@ test("the version is the same in package.json and every mod.info (so the footer,
     const v = (fs.readFileSync(f, "utf8").match(/^modversion=(.*)$/m) || [])[1]?.trim();
     assert.equal(v, pkg, `${path.relative(root, f)} modversion matches package.json`);
   }
+});
+
+test("dead markers: an expired one stays gone while the mod still reports it, and comes back only for a new death", () => {
+  const { cfg, dataPath } = setup();
+  cfg.stateFile = path.join(dataPath, "dead.json");
+  cfg.deadKeepHours = 1;
+  const file = path.join(dataPath, "Lua", "zmap_players.txt");
+  const H = 3600_000;
+  const now = Date.now();
+  const at = (t, dead) => { // a fresh file as of time t
+    fs.writeFileSync(file, JSON.stringify({ t: 1, players: [], dead }));
+    fs.utimesSync(file, new Date(t), new Date(t));
+    return readPlayers(cfg, t).dead.map((d) => d.name);
+  };
+  const bob = [{ name: "Bob", x: 1, y: 2, z: 0 }];
+  assert.deepEqual(at(now, bob), ["Bob"]);
+  assert.deepEqual(at(now + 2 * H, bob), [], "expired");
+  assert.deepEqual(at(now + 2 * H + 1000, bob), [], "the mod still lists the death: not re-added with a fresh age");
+  assert.deepEqual(at(now + 3 * H, []), [], "the mod forgot the death");
+  assert.deepEqual(at(now + 3 * H + 1000, bob), ["Bob"], "a new death shows again");
+});
+
+test("dead markers: expiry also applies while the game server is down (stale, missing or half-written file)", () => {
+  const { cfg, dataPath } = setup();
+  cfg.stateFile = path.join(dataPath, "dead.json");
+  cfg.deadKeepHours = 1;
+  const file = path.join(dataPath, "Lua", "zmap_players.txt");
+  const now = Date.now();
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [], dead: [{ name: "Bob", x: 1, y: 2, z: 0 }] }));
+  fs.utimesSync(file, new Date(now), new Date(now));
+  assert.equal(readPlayers(cfg, now).dead.length, 1);
+  assert.equal(readPlayers(cfg, now + 30 * 60_000).dead.length, 1, "stale but not yet expired");
+  assert.equal(readPlayers(cfg, now + 2 * 3600_000).dead.length, 0, "stale and expired");
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [], dead: [{ name: "Eve", x: 1, y: 2, z: 0 }] }));
+  fs.utimesSync(file, new Date(now + 2 * 3600_000), new Date(now + 2 * 3600_000));
+  assert.equal(readPlayers(cfg, now + 2 * 3600_000).dead.length, 1);
+  fs.writeFileSync(file, '{"t":1,"play');
+  assert.equal(readPlayers(cfg, now + 4 * 3600_000).dead.length, 0, "half-written file, expired");
+});
+
+test("the dead-players file defaults to the tile cache folder, which the systemd unit lets the service write", () => {
+  assert.equal(loadConfig({ TILE_CACHE_DIR: "/var/cache/zmap/tiles" }).stateFile, path.join("/var/cache/zmap/tiles", "dead-players.json"));
+  assert.equal(loadConfig({ TILE_CACHE_DIR: "/c", STATE_FILE: "/x/d.json" }).stateFile, "/x/d.json");
+});
+
+test("dead markers: names the mod lists as cleared (alive but hidden) drop the saved marker", () => {
+  const { cfg, dataPath } = setup();
+  cfg.stateFile = path.join(dataPath, "dead.json");
+  const file = path.join(dataPath, "Lua", "zmap_players.txt");
+  const write = (o) => fs.writeFileSync(file, JSON.stringify({ t: 1, players: [], ...o }));
+  write({ dead: [{ name: "Admin", x: 1, y: 2, z: 0 }, { name: "Bob", x: 3, y: 4, z: 0 }] });
+  assert.deepEqual(readPlayers(cfg).dead.map((d) => d.name).sort(), ["Admin", "Bob"]);
+  write({ dead: [{ name: "Bob", x: 3, y: 4, z: 0 }], cleared: ["Admin", 7, ""] });
+  assert.deepEqual(readPlayers(cfg).dead.map((d) => d.name), ["Bob"], "Admin's marker is dropped, Bob's stays");
+  assert.deepEqual(cleanNames("x"), []);
+  assert.deepEqual(cleanNames(["a", 5, null, "b"]), ["a", "b"]);
 });

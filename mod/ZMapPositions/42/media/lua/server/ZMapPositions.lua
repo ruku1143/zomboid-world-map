@@ -23,8 +23,10 @@ local FILE_NAME = "zmap_players.txt"
 local lastWrite = 0
 local lastAge = nil -- world age (hours) at the previous write, to tell whether time is advancing
 local lastErrors = {} -- label -> last message printed, so a repeating error is logged once
-local lastSeen = {} -- username -> {x, y, z} of the last living write, for deaths we only notice afterwards
+local LAST_SEEN_KEEP_MS = 10 * 60 * 1000
+local lastSeen = {} -- username -> {x, y, z, t} of the last living write, for deaths we only notice afterwards (dropped after LAST_SEEN_KEEP_MS)
 local dead = {}     -- username -> {x, y, z} where they died; cleared when they are alive again
+local hiddenCleared = {} -- usernames with a death marker who are now alive but hidden (ghost-mode admins): listed as "cleared" so the web server drops its saved marker too
 
 local function nowMs()
     if getTimestampMs then return getTimestampMs() end
@@ -118,6 +120,7 @@ local function markDead(p)
     if not SHOW_DEATHS or not p or isHidden(p) then return end
     local name = p:getUsername()
     if not name or dead[name] then return end
+    hiddenCleared[name] = nil
     local ok, pos = pcall(function()
         return { x = math.floor(p:getX()), y = math.floor(p:getY()), z = math.floor(p:getZ()) }
     end)
@@ -131,11 +134,19 @@ local function playerJson(p)
         markDead(p)
         return nil
     end
-    if isHidden(p) then return nil end
     local name = p:getUsername()
+    if isHidden(p) then
+        -- Alive but hidden: the old death marker must not linger (or reveal them), here or on the web server.
+        if dead[name] then
+            dead[name] = nil
+            hiddenCleared[name] = true
+        end
+        return nil
+    end
     -- Alive again (a new character): the old death marker goes.
     dead[name] = nil
-    lastSeen[name] = { x = math.floor(p:getX()), y = math.floor(p:getY()), z = math.floor(p:getZ()) }
+    hiddenCleared[name] = nil
+    lastSeen[name] = { x = math.floor(p:getX()), y = math.floor(p:getY()), z = math.floor(p:getZ()), t = nowMs() }
     return string.format('{"name":%s,"x":%d,"y":%d,"z":%d,"hp":%s,"car":%s}',
         jsonString(p:getUsername()),
         math.floor(p:getX()), math.floor(p:getY()), math.floor(p:getZ()), readHealth(p), readInVehicle(p))
@@ -168,6 +179,12 @@ local function writePositions()
     end
     -- Neither a safehouse nor a clock problem may stop player positions from being written.
     local paused = guarded("paused unavailable", "null", function() return readPaused(players and players:size() or 0) end)
+    local now = nowMs()
+    for name, seen in pairs(lastSeen) do
+        if now - seen.t > LAST_SEEN_KEEP_MS then lastSeen[name] = nil end
+    end
+    local clearedParts = {}
+    for name in pairs(hiddenCleared) do table.insert(clearedParts, jsonString(name)) end
     local deadParts = {}
     for name, pos in pairs(dead) do
         if pos then table.insert(deadParts, deadJson(name, pos)) end
@@ -176,8 +193,8 @@ local function writePositions()
     local gameTime = guarded("game time unavailable", "null", readGameTime)
     local writer = getFileWriter(FILE_NAME, true, false)
     if not writer then error("getFileWriter returned nil for " .. FILE_NAME) end
-    writer:write(string.format('{"t":%d,"time":%s,"paused":%s,"pois":%s,"players":[%s],"dead":[%s],"safehouses":[%s]}',
-        math.floor(nowMs() / 1000), gameTime, paused, tostring(SHOW_POIS), table.concat(parts, ","), table.concat(deadParts, ","), table.concat(safehouses, ",")))
+    writer:write(string.format('{"t":%d,"time":%s,"paused":%s,"pois":%s,"players":[%s],"dead":[%s],"cleared":[%s],"safehouses":[%s]}',
+        math.floor(nowMs() / 1000), gameTime, paused, tostring(SHOW_POIS), table.concat(parts, ","), table.concat(deadParts, ","), table.concat(clearedParts, ","), table.concat(safehouses, ",")))
     writer:close()
 end
 

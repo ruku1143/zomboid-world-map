@@ -347,6 +347,11 @@ function drawPlayers() {
 // Ease each player's displayed position toward its latest reported one.
 const GLIDE_MS = 300; // time constant of the glide
 const SNAP_TILES = 500; // farther than this is a teleport/respawn: jump instead of gliding
+const PING_FRAME_MS = 50;
+const playerInView = () => players.some((p) => {
+  const d = gameToDzi(p.dx, p.dy, meta.map);
+  return !offScreen(toScreen(d.x, d.y));
+});
 let lastFrame = 0, lastPing = 0;
 function glidePlayers(dt) {
   const k = 1 - Math.exp(-dt / GLIDE_MS);
@@ -366,10 +371,11 @@ function loop(now) {
   const dt = lastFrame ? Math.min(now - lastFrame, 100) : 0;
   lastFrame = now;
   glidePlayers(dt);
-  if (!reduceMotion && players.length) {
+  if (!reduceMotion && meta) {
     ping = (now % PING_MS) / PING_MS;
-    // ~30 fps is plenty for the ring and keeps an idle page cheap.
-    if (now - lastPing >= 33) { lastPing = now; dirty = true; }
+    // The ring only needs ~20 fps, and only while a living player is actually in view: a full redraw
+    // (tiles, POIs, labels) with nothing animating on screen would just burn battery.
+    if (now - lastPing >= PING_FRAME_MS && playerInView()) { lastPing = now; dirty = true; }
   }
   if (meta && (cam.x !== goal.x || cam.y !== goal.y || cam.scale !== goal.scale)) {
     stepCamera(cam, goal, reduceMotion ? Infinity : dt, innerWidth, innerHeight);
@@ -544,12 +550,12 @@ function isPaused(data) {
   return key !== null && data.players.length === 0 && Date.now() - clockChangedAt > CLOCK_STALL_MS;
 }
 
-function setState(kind, text) {
+// `dim` greys the map when what is on it can't be trusted: the server looks stopped, or we lost the connection.
+function setState(kind, text, dim = kind === "offline") {
   const el = $("state");
   el.className = `pill ${kind}`;
   el.textContent = text;
-  const off = kind === "offline";
-  if (off !== offline) { offline = off; redraw(); }
+  if (dim !== offline) { offline = dim; redraw(); }
 }
 
 let lastPlayers = null;
@@ -580,6 +586,7 @@ function renderPlayers(data) {
   renderSafehouses(data.safehouses || []);
   poiAllowed = data.pois !== false;
   $("poiHead").hidden = $("poiCats").hidden = !poiAllowed;
+  syncPoiHint();
   $("clock").textContent = data.gameTime ? formatGameTime(data.gameTime) : "";
   $("empty").hidden = players.length + dead.length > 0;
   const note = data.reason === "no-file"
@@ -628,6 +635,9 @@ persistedToggle("shShow", "zmap-safehouses", (on) => (showSafehouses = on));
 persistedToggle("townsShow", "zmap-towns", (on) => (showTowns = on));
 persistedToggle("poiShow", "zmap-pois", (on) => (showPois = on));
 
+// Says why nothing shows when every category is switched off (and stays out of the way when the mod hides POIs).
+const syncPoiHint = () => { $("poiHint").hidden = !poiAllowed || poiCats.size > 0; };
+
 // One chip per category, with its count; the chosen set is remembered as a JSON list of ids.
 function initPoiChips() {
   try {
@@ -649,10 +659,12 @@ function initPoiChips() {
       if (!poiCats.delete(c.id)) poiCats.add(c.id);
       chip.setAttribute("aria-pressed", String(poiCats.has(c.id)));
       try { localStorage.setItem("zmap-poi-cats", JSON.stringify([...poiCats])); } catch {}
+      syncPoiHint();
       redraw();
     });
     return chip;
   }));
+  syncPoiHint();
 }
 initPoiChips();
 
@@ -665,7 +677,7 @@ async function poll() {
       if (data && !data.error) renderPlayers(data);
     } catch {
       $("status").textContent = "Connection lost, retrying…";
-      setState("unknown", "Unknown");
+      setState("unknown", "Unknown", true);
     }
   }
   setTimeout(poll, meta.refreshSeconds * 1000);

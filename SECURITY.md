@@ -13,10 +13,10 @@ Only the latest `main` is supported. There are no release branches; update by pu
 Bugs in this repo's code that let someone do more than the map is meant to allow, for example:
 - reading files outside the static `public/` folder or the Zomboid data folder (path traversal);
 - making the tile proxy fetch anything other than the configured tile host, or filling the disk beyond the configured cache limit;
-- exposing more of the Zomboid data folder than the documented fields (`PublicName` from the server ini, and the player, safehouse and clock data the mod writes);
+- exposing more of the Zomboid data folder than the documented fields (`PublicName` from the server ini, and the player, death-marker, safehouse, pause and clock data the mod writes);
 - the Lua mod changing game state (it is meant to be write-only to its own `.txt` file).
 
 ## What is out of scope (by design)
-- **No login.** The page is read-only and has no authentication. If it is reachable by strangers, it shows player names, positions, health and safehouses to all of them. Put it behind something like Cloudflare Access (see `deploy/cloudflared.md`) if that matters to you, and use the mod's option flags to share less.
+- **No login.** The page is read-only and has no authentication. If it is reachable by strangers, it shows player names, positions, health, where players died and safehouses to all of them. Put it behind something like Cloudflare Access (see `deploy/cloudflared.md`) if that matters to you, and use the mod's option flags to share less.
 - Vulnerabilities in Project Zomboid itself, the game server, or the third-party tile host (`tiles.pzmap.org`).
 - Problems that need an attacker to already control the server or its files.
