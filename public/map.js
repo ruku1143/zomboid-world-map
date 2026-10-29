@@ -264,6 +264,10 @@ function drawPois() {
   ctx.globalAlpha = 1;
 }
 
+// Progress 0..1 of the current ping (one every PING_MS); -1 (no ring) when motion is reduced.
+const PING_MS = 2000;
+let ping = -1;
+
 function drawPlayers() {
   ctx.font = "14px system-ui, sans-serif"; // same as the player list
   ctx.textBaseline = "middle";
@@ -292,16 +296,29 @@ function drawPlayers() {
     ctx.moveTo(s.x - 2.5, s.y - 2.5); ctx.lineTo(s.x + 2.5, s.y + 2.5);
     ctx.moveTo(s.x + 2.5, s.y - 2.5); ctx.lineTo(s.x - 2.5, s.y + 2.5);
     ctx.stroke();
-    haloText(`${p.name} (dead)`, s.x + 14, s.y, 3);
+    haloText(`${p.name} 💀`, s.x + 14, s.y, 3);
   }
   for (const p of players) {
     const d = gameToDzi(p.dx, p.dy, meta.map);
     const s = toScreen(d.x, d.y);
     if (offScreen(s)) continue;
     // Players on another floor stay visible but faded.
-    ctx.globalAlpha = clampFloor(p.z) === floor ? 1 : 0.4;
+    const fade = clampFloor(p.z) === floor ? 1 : 0.4;
+    ctx.globalAlpha = fade;
     // Same look as the list swatch (.swatch): colour disc, dark border, faint light outer ring.
     const R = 7;
+    // A sonar ping in the player's colour: a ring that shoots out from the dot and fades, so living players
+    // stand out from the static POI dots. Skipped when motion is reduced.
+    if (ping >= 0) {
+      const out = 1 - (1 - ping) ** 3; // fast at first, slowing as it fades
+      ctx.globalAlpha = fade * (1 - ping) * 0.9;
+      ctx.strokeStyle = colors.get(p.name) || "#f2b134";
+      ctx.lineWidth = 2.5 * (1 - ping) + 0.5;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, R + 1.4 + 11 * out, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = fade;
+    }
     ctx.beginPath();
     ctx.arc(s.x, s.y, R + 1.4, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(255,255,255,0.25)";
@@ -330,7 +347,7 @@ function drawPlayers() {
 // Ease each player's displayed position toward its latest reported one.
 const GLIDE_MS = 300; // time constant of the glide
 const SNAP_TILES = 500; // farther than this is a teleport/respawn: jump instead of gliding
-let lastFrame = 0;
+let lastFrame = 0, lastPing = 0;
 function glidePlayers(dt) {
   const k = 1 - Math.exp(-dt / GLIDE_MS);
   for (const p of players) {
@@ -349,6 +366,11 @@ function loop(now) {
   const dt = lastFrame ? Math.min(now - lastFrame, 100) : 0;
   lastFrame = now;
   glidePlayers(dt);
+  if (!reduceMotion && players.length) {
+    ping = (now % PING_MS) / PING_MS;
+    // ~30 fps is plenty for the ring and keeps an idle page cheap.
+    if (now - lastPing >= 33) { lastPing = now; dirty = true; }
+  }
   if (meta && (cam.x !== goal.x || cam.y !== goal.y || cam.scale !== goal.scale)) {
     stepCamera(cam, goal, reduceMotion ? Infinity : dt, innerWidth, innerHeight);
     dirty = true;
@@ -545,8 +567,9 @@ function renderPlayers(data) {
   const list = $("players");
   const deadRows = dead.map((d) => {
     const z = clampFloor(d.z);
-    const li = listItem(DEAD_COLOR, `${d.name} (dead)`, `${z ? `${floorLabel(z)} · ` : ""}${d.x}, ${d.y} · ${ago(d.diedAt)}`, () => { centerOnGame(d.x, d.y); setFloor(z); });
+    const li = listItem(DEAD_COLOR, `${d.name} 💀`, `${z ? `${floorLabel(z)} · ` : ""}${d.x}, ${d.y} · ${ago(d.diedAt)}`, () => { centerOnGame(d.x, d.y); setFloor(z); });
     li.classList.add("dead");
+    li.querySelector(".swatch").classList.add("dead"); // the same cross as the map marker
     return li;
   });
   list.replaceChildren(...players.map((p) => {
