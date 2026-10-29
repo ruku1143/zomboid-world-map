@@ -347,6 +347,11 @@ function drawPlayers() {
 // Ease each player's displayed position toward its latest reported one.
 const GLIDE_MS = 300; // time constant of the glide
 const SNAP_TILES = 500; // farther than this is a teleport/respawn: jump instead of gliding
+const PING_FRAME_MS = 50;
+const playerInView = () => players.some((p) => {
+  const d = gameToDzi(p.dx, p.dy, meta.map);
+  return !offScreen(toScreen(d.x, d.y));
+});
 let lastFrame = 0, lastPing = 0;
 function glidePlayers(dt) {
   const k = 1 - Math.exp(-dt / GLIDE_MS);
@@ -366,10 +371,11 @@ function loop(now) {
   const dt = lastFrame ? Math.min(now - lastFrame, 100) : 0;
   lastFrame = now;
   glidePlayers(dt);
-  if (!reduceMotion && players.length) {
+  if (!reduceMotion && meta) {
     ping = (now % PING_MS) / PING_MS;
-    // ~30 fps is plenty for the ring and keeps an idle page cheap.
-    if (now - lastPing >= 33) { lastPing = now; dirty = true; }
+    // The ring only needs ~20 fps, and only while a living player is actually in view: a full redraw
+    // (tiles, POIs, labels) with nothing animating on screen would just burn battery.
+    if (now - lastPing >= PING_FRAME_MS && playerInView()) { lastPing = now; dirty = true; }
   }
   if (meta && (cam.x !== goal.x || cam.y !== goal.y || cam.scale !== goal.scale)) {
     stepCamera(cam, goal, reduceMotion ? Infinity : dt, innerWidth, innerHeight);
