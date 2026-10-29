@@ -41,7 +41,14 @@ browser <──/api/players, /api/meta, /tiles/*── server.js ──(curl, ca
 ## Git workflow
 - Work on the branch the session is given and open a **draft** PR; the owner marks it ready and squash-merges. After a merge the same branch name is reused: reset it to the latest `main` (`git fetch origin main && git checkout -B <branch> origin/main`) before new work, never stack on merged history.
 - Commit messages: short imperative subject. PR bodies explain what and why, state what was and wasn't tested, and say if a game-server restart is needed.
+- Never push to `main`: every change goes through a PR from a branch. When asked to merge, squash-merge only once all four checks are green **on the PR's current head commit** (check the run's `head_sha`; a notification can be about an earlier push). GitHub deletes the branch after the merge, so a stop-hook "unpushed commit" warning on the reset branch is just the merged commit; don't force-push to clear it.
 - Don't force-push. If CI fails, fix the cause; never skip or disable tests.
+
+## Releases
+- Versions are `vMAJOR.MINOR.PATCH` (semver: new features bump the minor, fixes the patch). The version lives in `package.json` (shown in the page footer) and both `mod/ZMapPositions/**/mod.info` files (`modversion`); keep all three in step.
+- A release is its own small PR that bumps those three and anything that names a version (check README), merged like any other. After it merges, the owner tags that commit `vX.Y.Z` on `main` and publishes the GitHub release (use the generated notes as a base and trim them to what a server owner cares about; say whether the mod changed, since that needs a game-server restart).
+- A cloud session can't push tags (the git proxy refuses them) and has no tool to create releases, so give the owner the exact commit and commands rather than retrying.
+- Current release: v1.0.0.
 
 ## Gotchas
 - Tiles at the right and bottom edge of a level are smaller than the tile size; draw them at their real size or terrain drifts away from the player dots (`exactTileRect`, `parentCrop`).
