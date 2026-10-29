@@ -1,7 +1,9 @@
 // Points of interest (named buildings), in game coordinates. Taken from html/poi.json of CalvyPZ/PZmap
 // (MIT licensed, notice in CHANGES.md). Town and region entries are left out (they are in towns.js),
 // duplicates are merged, a garbled name is repaired, and each entry gets a category from keywords in
-// its name (see POI_CATEGORIES in projection.js; "other" is whatever matched nothing).
+// its name (see POI_CATEGORIES in projection.js; "other" is whatever matched nothing). The upstream list
+// lacks four fire stations (Irvington, Irvington Speedway, West Point, Riverside), added here from the
+// Project Zomboid wiki's "Fire department" page; add any other local fixes the same way.
 export const POIS = [
   { name: "ABCDriving School", x: 13312, y: 1314, cat: "civic" },
   { name: "Bank", x: 6504, y: 5301, cat: "civic" },
@@ -70,9 +72,13 @@ export const POIS = [
   { name: "Fire Departament", x: 8138, y: 11741, cat: "fire" },
   { name: "Fire Department", x: 763, y: 9770, cat: "fire" },
   { name: "Fire Department", x: 2069, y: 6279, cat: "fire" },
+  { name: "Fire Department", x: 2498, y: 14071, cat: "fire" },
+  { name: "Fire Department", x: 6129, y: 5255, cat: "fire" },
+  { name: "Fire Department", x: 12278, y: 7036, cat: "fire" },
   { name: "Fire Department", x: 12363, y: 1760, cat: "fire" },
   { name: "Fire Department", x: 13689, y: 1779, cat: "fire" },
   { name: "Fire Department", x: 13943, y: 3047, cat: "fire" },
+  { name: "Irvington Speedway Fire Department", x: 1034, y: 12998, cat: "fire" },
   { name: "Abandoned Restaurant", x: 10625, y: 10047, cat: "food" },
   { name: "All You Can Eat Buffet", x: 10619, y: 9437, cat: "food" },
   { name: "American Eats", x: 12781, y: 1214, cat: "food" },
