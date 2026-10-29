@@ -530,3 +530,46 @@ test("the version is the same in package.json and every mod.info (so the footer,
     assert.equal(v, pkg, `${path.relative(root, f)} modversion matches package.json`);
   }
 });
+
+test("dead markers: an expired one stays gone while the mod still reports it, and comes back only for a new death", () => {
+  const { cfg, dataPath } = setup();
+  cfg.stateFile = path.join(dataPath, "dead.json");
+  cfg.deadKeepHours = 1;
+  const file = path.join(dataPath, "Lua", "zmap_players.txt");
+  const H = 3600_000;
+  const now = Date.now();
+  const at = (t, dead) => { // a fresh file as of time t
+    fs.writeFileSync(file, JSON.stringify({ t: 1, players: [], dead }));
+    fs.utimesSync(file, new Date(t), new Date(t));
+    return readPlayers(cfg, t).dead.map((d) => d.name);
+  };
+  const bob = [{ name: "Bob", x: 1, y: 2, z: 0 }];
+  assert.deepEqual(at(now, bob), ["Bob"]);
+  assert.deepEqual(at(now + 2 * H, bob), [], "expired");
+  assert.deepEqual(at(now + 2 * H + 1000, bob), [], "the mod still lists the death: not re-added with a fresh age");
+  assert.deepEqual(at(now + 3 * H, []), [], "the mod forgot the death");
+  assert.deepEqual(at(now + 3 * H + 1000, bob), ["Bob"], "a new death shows again");
+});
+
+test("dead markers: expiry also applies while the game server is down (stale, missing or half-written file)", () => {
+  const { cfg, dataPath } = setup();
+  cfg.stateFile = path.join(dataPath, "dead.json");
+  cfg.deadKeepHours = 1;
+  const file = path.join(dataPath, "Lua", "zmap_players.txt");
+  const now = Date.now();
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [], dead: [{ name: "Bob", x: 1, y: 2, z: 0 }] }));
+  fs.utimesSync(file, new Date(now), new Date(now));
+  assert.equal(readPlayers(cfg, now).dead.length, 1);
+  assert.equal(readPlayers(cfg, now + 30 * 60_000).dead.length, 1, "stale but not yet expired");
+  assert.equal(readPlayers(cfg, now + 2 * 3600_000).dead.length, 0, "stale and expired");
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [], dead: [{ name: "Eve", x: 1, y: 2, z: 0 }] }));
+  fs.utimesSync(file, new Date(now + 2 * 3600_000), new Date(now + 2 * 3600_000));
+  assert.equal(readPlayers(cfg, now + 2 * 3600_000).dead.length, 1);
+  fs.writeFileSync(file, '{"t":1,"play');
+  assert.equal(readPlayers(cfg, now + 4 * 3600_000).dead.length, 0, "half-written file, expired");
+});
+
+test("the dead-players file defaults to the tile cache folder, which the systemd unit lets the service write", () => {
+  assert.equal(loadConfig({ TILE_CACHE_DIR: "/var/cache/zmap/tiles" }).stateFile, path.join("/var/cache/zmap/tiles", "dead-players.json"));
+  assert.equal(loadConfig({ TILE_CACHE_DIR: "/c", STATE_FILE: "/x/d.json" }).stateFile, "/x/d.json");
+});
