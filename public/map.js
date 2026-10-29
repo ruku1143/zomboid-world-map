@@ -296,7 +296,7 @@ function drawPlayers() {
     ctx.moveTo(s.x - 2.5, s.y - 2.5); ctx.lineTo(s.x + 2.5, s.y + 2.5);
     ctx.moveTo(s.x + 2.5, s.y - 2.5); ctx.lineTo(s.x - 2.5, s.y + 2.5);
     ctx.stroke();
-    haloText(`${p.name} (dead)`, s.x + 14, s.y, 3);
+    haloText(`${p.name} 💀`, s.x + 14, s.y, 3);
   }
   for (const p of players) {
     const d = gameToDzi(p.dx, p.dy, meta.map);
@@ -567,7 +567,7 @@ function renderPlayers(data) {
   const list = $("players");
   const deadRows = dead.map((d) => {
     const z = clampFloor(d.z);
-    const li = listItem(DEAD_COLOR, `${d.name} (dead)`, `${z ? `${floorLabel(z)} · ` : ""}${d.x}, ${d.y} · ${ago(d.diedAt)}`, () => { centerOnGame(d.x, d.y); setFloor(z); });
+    const li = listItem(DEAD_COLOR, `${d.name} 💀`, `${z ? `${floorLabel(z)} · ` : ""}${d.x}, ${d.y} · ${ago(d.diedAt)}`, () => { centerOnGame(d.x, d.y); setFloor(z); });
     li.classList.add("dead");
     return li;
   });
