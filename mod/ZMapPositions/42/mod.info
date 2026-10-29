@@ -1,5 +1,5 @@
 name=ZMapPositions
 id=ZMapPositions
 author=ruku1143
-modversion=1.2.0
+modversion=1.0.0
 description=Writes online player positions and safehouses to Lua/zmap_players.txt for the live world map. Server side only, read-only.

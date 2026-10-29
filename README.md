@@ -105,12 +105,12 @@ The map layout (tile size, image size and projection origin) is one constant, `M
 ## Update
 `sudo -u zmap git -C /srv/zomboid-map pull && sudo systemctl restart zmap`
 
-The map service reads whatever the mod writes, but the mod itself is a copy on the game server. When a release changes the mod (the safehouse outlines need the 1.2 mod), re-copy it and restart the game server once (check nobody is online first), as in the install step:
+The map service reads whatever the mod writes, but the mod itself is a copy on the game server. When a release changes the mod (safehouse outlines, death markers, the Paused state and the `SHOW_POIS` switch all come from the mod), re-copy it and restart the game server once (check nobody is online first), as in the install step:
 ```
 sudo -u zomboid bash -c 'umask 0002; cp /srv/zomboid-map/mod/ZMapPositions/42/media/lua/server/ZMapPositions.lua /srv/zomboid-server/media/lua/server/'
 sudo systemctl restart zomboid
 ```
-Without it the map keeps working, just without safehouses.
+Without it the map keeps working, just without whatever the old mod doesn't write (safehouses, death markers, Paused, the POI switch).
 
 Run git as the `zmap` user, who owns the checkout. Plain `sudo git pull` runs as root and git refuses with `detected dubious ownership`. (If you cloned as another user, `sudo git config --global --add safe.directory /srv/zomboid-map` also works.)
 
