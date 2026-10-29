@@ -3,7 +3,7 @@
 Why the pieces look the way they do. Verified on a Build 42.21.0 dedicated server on Linux.
 
 ## Player and safehouse data
-- Live coordinates only come from inside the game, so a small server-side Lua mod (`mod/ZMapPositions`) writes `<Zomboid data>/Lua/zmap_players.txt` every 1 s: online players (`getOnlinePlayers()`) and the safehouse list (`SafeHouse.getSafehouseList()`). `server.js` reads and serves it. RCON gives names only, logs give no coordinates, and save files are not live.
+- Live coordinates only come from inside the game, so a small server-side Lua mod (`mod/ZMapPositions`) writes `<Zomboid data>/Lua/zmap_players.txt` every 1 s: online players (`getOnlinePlayers()`), the safehouse list (`SafeHouse.getSafehouseList()`), where players died (`dead`, noticed through `isDead()` and `Events.OnPlayerDeath`; not confirmed which of the two fires on a Build 42 server), whether `PauseEmpty` has frozen the world (`paused`, inferred from the world age not advancing), the in-game clock and the `SHOW_POIS` flag. `server.js` reads and serves it. RCON gives names only, logs give no coordinates, and save files are not live.
 - Build 42 `getFileWriter` accepts `.txt` but rejects `.json`, and Lua cannot create folders, so the JSON document lives in a `.txt` in `Lua/`.
 - With `PauseEmpty=true` the world tick stops when nobody is online, so the mod hooks `Events.OnTickEvenPaused`.
 - A local mod needs the Build 42 layout (`42/mod.info`, `42/media/...`, an empty `common/`).

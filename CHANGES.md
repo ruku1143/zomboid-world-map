@@ -4,7 +4,7 @@ Forked from `fpsacha/zomboid-control-panel` (MIT). The whole upstream tree is st
 
 This repo keeps only the live map: a tile proxy with a disk cache, a vanilla JS canvas client, and a ~150 line write-only Lua mod (replacing the ~11k line PanelBridge mod and its admin command inbox). Everything else was removed on purpose: the Express/React control panel and its services, authentication (use Cloudflare Access in front of the tunnel), Docker and installers, Build 41 support, vehicles, Socket.IO, and all npm dependencies.
 
-Since then the map has gained a floor selector (basement to floor 7), town names and, in the mod, health, in-game time and an in-vehicle flag; all of it is new code. The only upstream data used is the list of town positions in `public/towns.js`, taken from the POI list in upstream's `client/src/lib/worldMapPoi.json` (MIT, see `LICENSE`).
+Since then the map has gained a floor selector (basement to floor 7), town names, a points-of-interest layer (below), safehouse outlines, remembered death markers, an Online/Offline/Paused status pill, a sonar ping on living players and, in the mod, health, in-game time, an in-vehicle flag, death and pause reporting and the `SHOW_*` options; all of it is new code apart from the data credited here. The only upstream data used is the list of town positions in `public/towns.js`, taken from the POI list in upstream's `client/src/lib/worldMapPoi.json` (MIT, see `LICENSE`).
 
 ## Points of interest
 
