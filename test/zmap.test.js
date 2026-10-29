@@ -4,6 +4,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   MAP, mapFromDescriptors, loadConfig, readPlayers, cleanDead, readBuildInfo,
   readVersion, cleanSafehouses, readServerName, cleanGameTime, tilePaths, cacheTile, readCachedTile, createServer,
@@ -511,7 +512,7 @@ test("readPlayers: the pois flag is a boolean from the mod, null if missing or j
 });
 
 test("the version is the same in package.json and both mod.info files (so the footer, the mod and the release tag agree)", () => {
-  const root = path.join(path.dirname(new URL(import.meta.url).pathname), "..");
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
   assert.match(pkg, /^\d+\.\d+\.\d+$/, "package.json version is MAJOR.MINOR.PATCH");
   for (const f of ["mod/ZMapPositions/mod.info", "mod/ZMapPositions/42/mod.info"]) {
