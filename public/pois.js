@@ -2,8 +2,9 @@
 // (MIT licensed, notice in CHANGES.md). Town and region entries are left out (they are in towns.js),
 // duplicates are merged, a garbled name is repaired, and each entry gets a category from keywords in
 // its name (see POI_CATEGORIES in projection.js; "other" is whatever matched nothing). The upstream list
-// lacks four fire stations (Irvington, Irvington Speedway, West Point, Riverside), added here from the
-// Project Zomboid wiki's "Fire department" page; add any other local fixes the same way.
+// lacks four fire stations (Irvington, Irvington Speedway, West Point, Riverside) and the Burnt Town police
+// station, added here from the Project Zomboid wiki's "Fire department" and "Police station" pages, and the
+// police stations use the wiki's positions; add any other local fixes the same way.
 export const POIS = [
   { name: "ABCDriving School", x: 13312, y: 1314, cat: "civic" },
   { name: "Bank", x: 6504, y: 5301, cat: "civic" },
@@ -609,20 +610,21 @@ export const POIS = [
   { name: "Well", x: 8847, y: 9206, cat: "other" },
   { name: "Wellington Heights Golf Club", x: 12973, y: 2233, cat: "other" },
   { name: "Yummmers", x: 13571, y: 5762, cat: "other" },
+  { name: "Burnt Police Station", x: 13668, y: 4117, cat: "police" },
   { name: "Court House", x: 1438, y: 5834, cat: "police" },
   { name: "Court House", x: 12468, y: 1540, cat: "police" },
   { name: "Kentucky State Prison", x: 7693, y: 11873, cat: "police" },
-  { name: "Police Station", x: 2041, y: 5976, cat: "police" },
-  { name: "Police Station", x: 6082, y: 5261, cat: "police" },
+  { name: "Police Station", x: 2043, y: 5978, cat: "police" },
+  { name: "Police Station", x: 6081, y: 5261, cat: "police" },
   { name: "Police Station", x: 7252, y: 8378, cat: "police" },
-  { name: "Police Station", x: 10631, y: 10405, cat: "police" },
-  { name: "Police Station", x: 11898, y: 6940, cat: "police" },
-  { name: "Police Station", x: 13220, y: 3087, cat: "police" },
-  { name: "Police Station", x: 13782, y: 2558, cat: "police" },
-  { name: "Police Station & Prison", x: 12444, y: 1609, cat: "police" },
+  { name: "Police Station", x: 10636, y: 10408, cat: "police" },
+  { name: "Police Station", x: 11902, y: 6945, cat: "police" },
+  { name: "Police Station", x: 13221, y: 3086, cat: "police" },
+  { name: "Police Station", x: 13783, y: 2554, cat: "police" },
+  { name: "Police Station & Prison", x: 12496, y: 1615, cat: "police" },
   { name: "Police station", x: 2485, y: 13940, cat: "police" },
-  { name: "Police station", x: 8063, y: 11735, cat: "police" },
-  { name: "Police station", x: 12961, y: 1379, cat: "police" },
+  { name: "Police station", x: 8063, y: 11737, cat: "police" },
+  { name: "Police station", x: 12968, y: 1366, cat: "police" },
   { name: "Prison", x: 1431, y: 5880, cat: "police" },
   { name: "A.A. Ron Hunting Supply", x: 13961, y: 3231, cat: "shop" },
   { name: "Army Surplus Store", x: 12224, y: 1320, cat: "shop" },
