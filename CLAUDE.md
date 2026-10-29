@@ -31,7 +31,7 @@ browser <──/api/players, /api/meta, /tiles/*── server.js ──(curl, ca
 - Map dots, list swatches and labels share one look (colour disc, dark border, faint light ring, 14px normal-weight name). Keep them in step.
 - Camera: `cam` eases toward `goal` each frame (`stepCamera`); wheel zoom and "centre on player" set the goal, drag and pinch move `cam` directly, releasing a drag flings. Honour `prefers-reduced-motion` (instant).
 - Floors: `floor` in `map.js` (-1..7) is part of the tile key and URL (`tiles/f<floor>/<level>/<col>_<row>.jpg`, ground floor keeps the plain path); `server.js` `tilePaths` maps that to the cache path and the upstream `layer<floor>_files` URL. Players on other floors are drawn at 40% alpha. Town labels fade out between zoom 15.8 and 16.8 while POI dots fade in over the same range (names from 17.5; the "Other" category starts off); both the town and safehouse toggles are remembered in `localStorage`.
-- Player dots glide between polls (`glidePlayers`), snapping instead for jumps over 500 tiles.
+- Player dots glide between polls (`glidePlayers`), snapping instead for jumps over 500 tiles, and living players have a slow pulsing glow in their colour (`pulse`, redrawn at ~30 fps only while someone is online; static under `prefers-reduced-motion`) so they stand out from the POI dots.
 
 ## Deploying (for the owner; details in README)
 - Web changes: `sudo -u zmap git -C /srv/zomboid-map pull && sudo systemctl restart zmap`.

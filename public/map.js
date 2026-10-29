@@ -264,6 +264,10 @@ function drawPois() {
   ctx.globalAlpha = 1;
 }
 
+// 0..1, eased in and out over GLOW_MS; a fixed middle value when motion is reduced.
+const GLOW_MS = 2400;
+let pulse = 0.5;
+
 function drawPlayers() {
   ctx.font = "14px system-ui, sans-serif"; // same as the player list
   ctx.textBaseline = "middle";
@@ -299,9 +303,23 @@ function drawPlayers() {
     const s = toScreen(d.x, d.y);
     if (offScreen(s)) continue;
     // Players on another floor stay visible but faded.
-    ctx.globalAlpha = clampFloor(p.z) === floor ? 1 : 0.4;
+    const fade = clampFloor(p.z) === floor ? 1 : 0.4;
+    ctx.globalAlpha = fade;
     // Same look as the list swatch (.swatch): colour disc, dark border, faint light outer ring.
     const R = 7;
+    // A slow pulsing glow in the player's colour, so living players stand out from the static POI dots.
+    const color = colors.get(p.name) || "#f2b134";
+    const glowR = R + 10 + 10 * pulse;
+    const glow = ctx.createRadialGradient(s.x, s.y, R - 2, s.x, s.y, glowR);
+    glow.addColorStop(0, color);
+    glow.addColorStop(0.45, color + "88");
+    glow.addColorStop(1, color + "00");
+    ctx.globalAlpha = fade * (0.6 + 0.4 * pulse);
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, glowR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = fade;
     ctx.beginPath();
     ctx.arc(s.x, s.y, R + 1.4, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(255,255,255,0.25)";
@@ -330,7 +348,7 @@ function drawPlayers() {
 // Ease each player's displayed position toward its latest reported one.
 const GLIDE_MS = 300; // time constant of the glide
 const SNAP_TILES = 500; // farther than this is a teleport/respawn: jump instead of gliding
-let lastFrame = 0;
+let lastFrame = 0, lastGlow = 0;
 function glidePlayers(dt) {
   const k = 1 - Math.exp(-dt / GLIDE_MS);
   for (const p of players) {
@@ -349,6 +367,11 @@ function loop(now) {
   const dt = lastFrame ? Math.min(now - lastFrame, 100) : 0;
   lastFrame = now;
   glidePlayers(dt);
+  if (!reduceMotion && players.length) {
+    pulse = 0.5 - 0.5 * Math.cos((now / GLOW_MS) * Math.PI * 2);
+    // ~30 fps is plenty for a slow glow and keeps an idle page cheap.
+    if (now - lastGlow >= 33) { lastGlow = now; dirty = true; }
+  }
   if (meta && (cam.x !== goal.x || cam.y !== goal.y || cam.scale !== goal.scale)) {
     stepCamera(cam, goal, reduceMotion ? Infinity : dt, innerWidth, innerHeight);
     dirty = true;
