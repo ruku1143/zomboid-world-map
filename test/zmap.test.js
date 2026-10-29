@@ -4,6 +4,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   MAP, mapFromDescriptors, loadConfig, readPlayers, cleanDead, readBuildInfo,
   readVersion, cleanSafehouses, readServerName, cleanGameTime, tilePaths, cacheTile, readCachedTile, createServer,
@@ -508,4 +509,24 @@ test("readPlayers: the pois flag is a boolean from the mod, null if missing or j
   assert.equal(read(undefined), null, "an older mod without the field is null");
   assert.equal(read(false, Date.now() + 60_000), false, "a stale file keeps the owner's choice");
   assert.equal(readPlayers(setup().cfg).pois, null, "no file at all");
+});
+
+test("the version is the same in package.json and every mod.info (so the footer, the mod and the release tag agree)", () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
+  assert.match(pkg, /^\d+\.\d+\.\d+$/, "package.json version is MAJOR.MINOR.PATCH");
+  const infos = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const f = path.join(dir, e.name);
+      if (e.isDirectory()) walk(f);
+      else if (e.name === "mod.info") infos.push(f);
+    }
+  };
+  walk(path.join(root, "mod"));
+  assert.ok(infos.length >= 2, "found the mod.info files");
+  for (const f of infos) {
+    const v = (fs.readFileSync(f, "utf8").match(/^modversion=(.*)$/m) || [])[1]?.trim();
+    assert.equal(v, pkg, `${path.relative(root, f)} modversion matches package.json`);
+  }
 });
