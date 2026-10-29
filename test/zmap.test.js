@@ -511,12 +511,22 @@ test("readPlayers: the pois flag is a boolean from the mod, null if missing or j
   assert.equal(readPlayers(setup().cfg).pois, null, "no file at all");
 });
 
-test("the version is the same in package.json and both mod.info files (so the footer, the mod and the release tag agree)", () => {
+test("the version is the same in package.json and every mod.info (so the footer, the mod and the release tag agree)", () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
   assert.match(pkg, /^\d+\.\d+\.\d+$/, "package.json version is MAJOR.MINOR.PATCH");
-  for (const f of ["mod/ZMapPositions/mod.info", "mod/ZMapPositions/42/mod.info"]) {
-    const v = (fs.readFileSync(path.join(root, f), "utf8").match(/^modversion=(.*)$/m) || [])[1]?.trim();
-    assert.equal(v, pkg, `${f} modversion matches package.json`);
+  const infos = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const f = path.join(dir, e.name);
+      if (e.isDirectory()) walk(f);
+      else if (e.name === "mod.info") infos.push(f);
+    }
+  };
+  walk(path.join(root, "mod"));
+  assert.ok(infos.length >= 2, "found the mod.info files");
+  for (const f of infos) {
+    const v = (fs.readFileSync(f, "utf8").match(/^modversion=(.*)$/m) || [])[1]?.trim();
+    assert.equal(v, pkg, `${path.relative(root, f)} modversion matches package.json`);
   }
 });

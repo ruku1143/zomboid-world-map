@@ -45,10 +45,9 @@ browser <──/api/players, /api/meta, /tiles/*── server.js ──(curl, ca
 - Don't force-push. If CI fails, fix the cause; never skip or disable tests.
 
 ## Releases
-- Versions are `vMAJOR.MINOR.PATCH` (semver: new features bump the minor, fixes the patch). The version lives in `package.json` (shown in the page footer) and both `mod/ZMapPositions/**/mod.info` files (`modversion`); keep all three in step (a test in `test/zmap.test.js` fails CI if they differ).
+- Versions are `vMAJOR.MINOR.PATCH` (semver: new features bump the minor, fixes the patch). The version lives in `package.json` (shown in the page footer) and both `mod/ZMapPositions/**/mod.info` files (`modversion`); keep all three in step (a test in `test/zmap.test.js` fails CI if they differ; it finds every `mod.info` under `mod/`).
 - A release is its own small PR that bumps those three and anything that names a version (check README), merged like any other. After it merges, the owner tags that commit `vX.Y.Z` on `main` and publishes the GitHub release (use the generated notes as a base and trim them to what a server owner cares about; say whether the mod changed, since that needs a game-server restart).
 - A cloud session can't push tags (the git proxy refuses them) and has no tool to create releases, so give the owner the exact commit and commands rather than retrying.
-- Current release: v1.0.0.
 
 ## Gotchas
 - Tiles at the right and bottom edge of a level are smaller than the tile size; draw them at their real size or terrain drifts away from the player dots (`exactTileRect`, `parentCrop`).
