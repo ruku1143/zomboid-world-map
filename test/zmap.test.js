@@ -467,3 +467,14 @@ test("readPlayers: dead markers expire after DEAD_KEEP_HOURS and survive a resta
   assert.deepEqual(readPlayers(cfg, now + 2 * 3600_000).dead, [], "expired");
   assert.deepEqual(cleanDead("x"), []);
 });
+
+test("readPlayers: paused is a boolean from the mod, null otherwise, and null when stale", () => {
+  const { cfg, dataPath } = setup();
+  const file = path.join(dataPath, "Lua", "zmap_players.txt");
+  const read = (paused, now) => { fs.writeFileSync(file, JSON.stringify({ t: 1, players: [], paused })); return readPlayers(cfg, now).paused; };
+  assert.equal(read(true), true);
+  assert.equal(read(false), false);
+  assert.equal(read("yes"), null, "junk becomes null");
+  assert.equal(read(undefined), null, "an older mod without the field is null");
+  assert.equal(read(true, Date.now() + 60_000), null, "a stale file says nothing about pausing");
+});

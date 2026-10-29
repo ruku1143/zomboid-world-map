@@ -189,11 +189,13 @@ export function readPlayers(cfg, now = Date.now()) {
   let players = [];
   let safehouses = [];
   let gameTime = null;
+  let paused = null;
   let reportedDead = [];
   try {
     const data = JSON.parse(fs.readFileSync(file, "utf8"));
     safehouses = cleanSafehouses(data.safehouses);
     gameTime = cleanGameTime(data.time);
+    paused = typeof data.paused === "boolean" ? data.paused : null; // PauseEmpty froze the world
     reportedDead = cleanDead(data.dead);
     players = (Array.isArray(data.players) ? data.players : [])
       .filter((p) => p && typeof p.name === "string" && Number.isFinite(p.x) && Number.isFinite(p.y))
@@ -206,7 +208,7 @@ export function readPlayers(cfg, now = Date.now()) {
   const dead = stale ? [...loadDead(cfg).values()] : updateDead(cfg, reportedDead, new Set(players.map((p) => p.name)), now);
   // A stale file means the server (or mod) stopped: nobody is shown as online and the clock is
   // hidden (it would be frozen). Safehouses are persistent, so the last known ones stay on the map.
-  return { ...base, players: stale ? [] : players, dead, safehouses, gameTime: stale ? null : gameTime };
+  return { ...base, players: stale ? [] : players, dead, safehouses, gameTime: stale ? null : gameTime, paused: stale ? null : paused };
 }
 
 // ---- game version ---------------------------------------------------------

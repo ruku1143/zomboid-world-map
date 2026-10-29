@@ -469,6 +469,17 @@ function listItem(color, label, detail, onClick) {
   return li;
 }
 
+// The mod says so (paused true/false); if it says nothing (null, e.g. an older mod), fall back to
+// "nobody online and the in-game clock hasn't moved for a while".
+const CLOCK_STALL_MS = 30000;
+let clockKey = null, clockChangedAt = Date.now();
+function isPaused(data) {
+  const key = data.gameTime ? JSON.stringify(data.gameTime) : null;
+  if (key !== clockKey) { clockKey = key; clockChangedAt = Date.now(); }
+  if (data.paused != null) return data.paused;
+  return key !== null && data.players.length === 0 && Date.now() - clockChangedAt > CLOCK_STALL_MS;
+}
+
 function setState(kind, text) {
   const el = $("state");
   el.className = `pill ${kind}`;
@@ -513,9 +524,11 @@ function renderPlayers(data) {
   $("status").textContent = data.stale
     ? note
     : `${players.length} online · updated ${ago(data.updatedAt)}`;
+  if (!data.stale && isPaused(data)) $("status").textContent = "Paused: nobody online, game time is stopped";
   // updatedAt is the positions file's mtime, so "last seen" survives a web-server restart.
   if (data.reason === "no-file") setState("unknown", "No data");
   else if (data.stale) setState("offline", "Offline");
+  else if (isPaused(data)) setState("paused", "Paused");
   else setState("online", "Online");
   redraw();
 }

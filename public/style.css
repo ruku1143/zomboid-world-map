@@ -11,6 +11,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .pill { font-size: 12px; padding: 2px 10px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
 .pill.online { color: #3fb950; }
 .pill.offline { color: var(--warn); }
+.pill.paused { color: #58a6ff; }
 .pill.unknown { color: var(--accent); }
 #status { color: var(--muted); flex: 1; font-size: 13px; }
 #clock { color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
