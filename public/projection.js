@@ -138,3 +138,17 @@ export function parseFloor(search) {
   const raw = new URLSearchParams(search).get("floor");
   return raw === null || !Number.isFinite(Number(raw)) ? 0 : clampFloor(raw);
 }
+
+// ---- points of interest ---------------------------------------------------
+// Category ids used in pois.js. "other" holds whatever no keyword matched, so it starts switched off.
+export const POI_CATEGORIES = [
+  { id: "medical", label: "Medical", color: "#e5534b" },
+  { id: "police", label: "Police", color: "#4c8dff" },
+  { id: "fire", label: "Fire", color: "#ff8c42" },
+  { id: "military", label: "Military", color: "#8a9a5b" },
+  { id: "gas", label: "Gas", color: "#f2b134" },
+  { id: "food", label: "Food", color: "#e07bd0" },
+  { id: "shop", label: "Shops", color: "#3fb950" },
+  { id: "civic", label: "Civic", color: "#a78bfa" },
+  { id: "other", label: "Other", color: "#9aa4b2" },
+];

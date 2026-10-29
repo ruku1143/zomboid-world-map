@@ -32,6 +32,14 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
 #safehouses { list-style: none; margin: 0; padding: 0; }
 #safehouses li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; cursor: pointer; border-bottom: 1px solid #ffffff14; }
 #safehouses small { color: var(--muted); text-align: right; }
+#poiHead { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #ffffff14; }
+#poiHead[hidden], #poiCats[hidden] { display: none; }
+#poiHead label { color: var(--muted); font-size: 12px; cursor: pointer; }
+#poiCats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; border-color: #ffffff30; color: var(--muted); font-size: 12px; }
+.chip .swatch { width: 8px; height: 8px; margin-right: 6px; }
+.chip[aria-pressed="true"] { color: var(--text); border-color: var(--muted); }
+.chip[aria-pressed="false"] .swatch { opacity: 0.35; }
 #mapOpts { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #ffffff14; }
 #mapOpts label { color: var(--muted); font-size: 12px; cursor: pointer; }
 #empty { color: var(--muted); margin: 8px 0; }

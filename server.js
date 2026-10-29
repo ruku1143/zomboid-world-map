@@ -180,7 +180,7 @@ export function readPlayers(cfg, now = Date.now()) {
   try {
     stat = fs.statSync(file);
   } catch {
-    return { available: false, stale: true, reason: "no-file", updatedAt: null, players: [], dead: [...loadDead(cfg).values()], safehouses: [], gameTime: null };
+    return { available: false, stale: true, reason: "no-file", updatedAt: null, players: [], dead: [...loadDead(cfg).values()], safehouses: [], gameTime: null, pois: null };
   }
   const ageMs = now - stat.mtimeMs;
   const staleAfterMs = Math.max(cfg.refreshSeconds, MOD_INTERVAL_SECONDS) * 3000;
@@ -190,25 +190,27 @@ export function readPlayers(cfg, now = Date.now()) {
   let safehouses = [];
   let gameTime = null;
   let paused = null;
+  let pois = null;
   let reportedDead = [];
   try {
     const data = JSON.parse(fs.readFileSync(file, "utf8"));
     safehouses = cleanSafehouses(data.safehouses);
     gameTime = cleanGameTime(data.time);
     paused = typeof data.paused === "boolean" ? data.paused : null; // PauseEmpty froze the world
+    pois = typeof data.pois === "boolean" ? data.pois : null; // the owner's SHOW_POIS flag; null = older mod
     reportedDead = cleanDead(data.dead);
     players = (Array.isArray(data.players) ? data.players : [])
       .filter((p) => p && typeof p.name === "string" && Number.isFinite(p.x) && Number.isFinite(p.y))
       .map((p) => ({ name: p.name, x: p.x, y: p.y, z: Number.isFinite(p.z) ? p.z : 0, hp: Number.isFinite(p.hp) ? Math.max(0, Math.min(100, Math.round(p.hp))) : null, car: typeof p.car === "boolean" ? p.car : null }));
   } catch {
     // Mid-write read; the client keeps its last good state and retries.
-    return { ...base, players: [], dead: [...loadDead(cfg).values()], safehouses: [], gameTime: null, error: "unreadable" };
+    return { ...base, players: [], dead: [...loadDead(cfg).values()], safehouses: [], gameTime: null, pois: null, error: "unreadable" };
   }
   // A stale file says nothing new about deaths or respawns; the remembered ones stay.
   const dead = stale ? [...loadDead(cfg).values()] : updateDead(cfg, reportedDead, new Set(players.map((p) => p.name)), now);
   // A stale file means the server (or mod) stopped: nobody is shown as online and the clock is
   // hidden (it would be frozen). Safehouses are persistent, so the last known ones stay on the map.
-  return { ...base, players: stale ? [] : players, dead, safehouses, gameTime: stale ? null : gameTime, paused: stale ? null : paused };
+  return { ...base, players: stale ? [] : players, dead, safehouses, gameTime: stale ? null : gameTime, paused: stale ? null : paused, pois };
 }
 
 // ---- game version ---------------------------------------------------------

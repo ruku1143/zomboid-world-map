@@ -10,7 +10,8 @@ import {
 } from "../server.js";
 import { prefetch, parseFloors } from "../prefetch.js";
 import { TOWNS } from "../public/towns.js";
-import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, stepCamera, PAN_MS, clampFloor, floorLabel, parseFloor, assignColors, colorForName, safehouseCorners, PLAYER_COLORS, MIN_ZOOM } from "../public/projection.js";
+import { POIS } from "../public/pois.js";
+import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, stepCamera, PAN_MS, clampFloor, floorLabel, parseFloor, assignColors, colorForName, safehouseCorners, PLAYER_COLORS, MIN_ZOOM, POI_CATEGORIES } from "../public/projection.js";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "zmap-"));
 
@@ -477,4 +478,34 @@ test("readPlayers: paused is a boolean from the mod, null otherwise, and null wh
   assert.equal(read("yes"), null, "junk becomes null");
   assert.equal(read(undefined), null, "an older mod without the field is null");
   assert.equal(read(true, Date.now() + 60_000), null, "a stale file says nothing about pausing");
+});
+
+test("points of interest: known categories, positions on the rendered map, no duplicates", () => {
+  assert.ok(POIS.length >= 500);
+  const cats = new Set(POI_CATEGORIES.map((c) => c.id));
+  assert.equal(cats.size, POI_CATEGORIES.length, "category ids are unique");
+  const seen = new Set();
+  for (const p of POIS) {
+    assert.ok(p.name && p.name === p.name.trim() && !/Ã|â€/.test(p.name), `${p.name} is a clean name`);
+    assert.ok(cats.has(p.cat), `${p.name}: category ${p.cat}`);
+    assert.ok(Number.isFinite(p.x) && Number.isFinite(p.y), p.name);
+    const d = gameToDzi(p.x, p.y, MAP);
+    assert.ok(d.x > 0 && d.x < MAP.fullWidth && d.y > 0 && d.y < MAP.fullHeight, `${p.name} is inside the map image`);
+    const key = `${p.name.toLowerCase()}|${p.x}|${p.y}`;
+    assert.ok(!seen.has(key), `${p.name} is listed twice`);
+    seen.add(key);
+  }
+  for (const c of POI_CATEGORIES) assert.ok(c.id === "other" || POIS.some((p) => p.cat === c.id), `${c.id} has entries`);
+});
+
+test("readPlayers: the pois flag is a boolean from the mod, null if missing or junk, and kept when stale", () => {
+  const { cfg, dataPath } = setup();
+  const file = path.join(dataPath, "Lua", "zmap_players.txt");
+  const read = (pois, now) => { fs.writeFileSync(file, JSON.stringify({ t: 1, players: [], pois })); return readPlayers(cfg, now).pois; };
+  assert.equal(read(true), true);
+  assert.equal(read(false), false);
+  assert.equal(read("no"), null, "junk becomes null");
+  assert.equal(read(undefined), null, "an older mod without the field is null");
+  assert.equal(read(false, Date.now() + 60_000), false, "a stale file keeps the owner's choice");
+  assert.equal(readPlayers(setup().cfg).pois, null, "no file at all");
 });

@@ -2,7 +2,8 @@
 -- server's safehouses and the in-game time to <Zomboid>/Lua/zmap_players.txt every INTERVAL_MS. Write-only:
 -- reads no commands and changes nothing in the game. Players that disconnect are simply
 -- absent from the next write, as are invisible/ghost-mode admins. Players that die are
--- listed under "dead" (where they died) until the same username is alive again.
+-- listed under "dead" (where they died) until the same username is alive again. It also writes
+-- whether the map should show its points-of-interest layer (the SHOW_POIS option).
 --
 -- Build 42 getFileWriter only accepts a small extension whitelist (.txt is fine,
 -- .json is rejected and returns nil) and Lua cannot create folders, so the JSON
@@ -14,6 +15,7 @@ local SHOW_HEALTH = true            -- each player's health bar and % on the map
 local SHOW_GAME_TIME = true         -- the in-game date and time in the top bar
 local SHOW_IN_VEHICLE = true        -- a car icon next to players who are driving or riding
 local HIDE_INVISIBLE_ADMINS = true  -- leave invisible / ghost-mode admins off the map
+local SHOW_POIS = true              -- the points-of-interest layer (a fixed list of buildings; shares nothing about players)
 local SHOW_DEATHS = true            -- keep a greyed-out marker where a player died, until they respawn
 
 local INTERVAL_MS = 1000
@@ -174,8 +176,8 @@ local function writePositions()
     local gameTime = guarded("game time unavailable", "null", readGameTime)
     local writer = getFileWriter(FILE_NAME, true, false)
     if not writer then error("getFileWriter returned nil for " .. FILE_NAME) end
-    writer:write(string.format('{"t":%d,"time":%s,"paused":%s,"players":[%s],"dead":[%s],"safehouses":[%s]}',
-        math.floor(nowMs() / 1000), gameTime, paused, table.concat(parts, ","), table.concat(deadParts, ","), table.concat(safehouses, ",")))
+    writer:write(string.format('{"t":%d,"time":%s,"paused":%s,"pois":%s,"players":[%s],"dead":[%s],"safehouses":[%s]}',
+        math.floor(nowMs() / 1000), gameTime, paused, tostring(SHOW_POIS), table.concat(parts, ","), table.concat(deadParts, ","), table.concat(safehouses, ",")))
     writer:close()
 end
 

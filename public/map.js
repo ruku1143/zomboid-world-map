@@ -1,5 +1,6 @@
-import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, stepCamera, PAN_MS, assignColors, colorForName, safehouseCorners, parseView, MIN_ZOOM, clampFloor, floorLabel, parseFloor, FLOOR_MIN, FLOOR_MAX } from "./projection.js";
+import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, stepCamera, PAN_MS, assignColors, colorForName, safehouseCorners, parseView, MIN_ZOOM, clampFloor, floorLabel, parseFloor, FLOOR_MIN, FLOOR_MAX, POI_CATEGORIES } from "./projection.js";
 import { TOWNS } from "./towns.js";
+import { POIS } from "./pois.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("map");
@@ -18,6 +19,10 @@ let colors = new Map();
 let safehouses = [];
 let showSafehouses = true;
 let showTowns = true;
+let showPois = true;
+let poiAllowed = true; // the owner's SHOW_POIS mod flag; anything but an explicit false
+const poiColor = new Map(POI_CATEGORIES.map((c) => [c.id, c.color]));
+const poiCats = new Set(POI_CATEGORIES.filter((c) => c.id !== "other").map((c) => c.id)); // "other" starts off
 // Map colours, the same as --bg and --text in style.css.
 const BG = "#12151a";
 const TEXT = "#e6e9ee";
@@ -154,6 +159,7 @@ function draw() {
   }
   if (showSafehouses) drawSafehouses();
   if (showTowns) drawTowns();
+  if (showPois && poiAllowed) drawPois();
   drawPlayers();
   if (offline) {
     ctx.fillStyle = "rgba(18,21,26,0.45)";
@@ -220,6 +226,42 @@ function drawTowns() {
   }
   ctx.globalAlpha = 1;
   ctx.textAlign = "start";
+}
+
+// Points of interest fade in over the same zoom range the town names fade out, and get names closer up.
+const POI_FADE_FROM = TOWNS_FULL_ZOOM, POI_FADE_FULL = TOWNS_GONE_ZOOM, POI_LABEL_ZOOM = 17.5;
+function drawPois() {
+  const zoom = zoomForScale(cam.scale, meta.map);
+  const alpha = Math.min(1, Math.max(0, (zoom - POI_FADE_FROM) / (POI_FADE_FULL - POI_FADE_FROM)));
+  if (alpha === 0) return;
+  ctx.font = "12px system-ui, sans-serif";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  // Buildings are mapped on the ground floor, so they fade a little when another floor is shown.
+  ctx.globalAlpha = alpha * (floor === 0 ? 1 : 0.4);
+  const labels = zoom >= POI_LABEL_ZOOM;
+  const R = 5;
+  for (const p of POIS) {
+    if (!poiCats.has(p.cat)) continue;
+    const d = gameToDzi(p.x, p.y, meta.map);
+    const s = toScreen(d.x, d.y);
+    if (offScreen(s)) continue;
+    // A smaller version of the player dot: colour disc, dark border, faint light ring.
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, R + 1.2, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, R, 0, Math.PI * 2);
+    ctx.fillStyle = BG;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, R - 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = poiColor.get(p.cat);
+    ctx.fill();
+    if (labels) haloText(p.name, s.x + 10, s.y, 3);
+  }
+  ctx.globalAlpha = 1;
 }
 
 function drawPlayers() {
@@ -513,6 +555,8 @@ function renderPlayers(data) {
     return listItem(colors.get(p.name), playerLabel(p), detail, () => { centerOnGame(p.x, p.y); setFloor(z); });
   }), ...deadRows);
   renderSafehouses(data.safehouses || []);
+  poiAllowed = data.pois !== false;
+  $("poiHead").hidden = $("poiCats").hidden = !poiAllowed;
   $("clock").textContent = data.gameTime ? formatGameTime(data.gameTime) : "";
   $("empty").hidden = players.length + dead.length > 0;
   const note = data.reason === "no-file"
@@ -559,6 +603,35 @@ function persistedToggle(id, key, set) {
 }
 persistedToggle("shShow", "zmap-safehouses", (on) => (showSafehouses = on));
 persistedToggle("townsShow", "zmap-towns", (on) => (showTowns = on));
+persistedToggle("poiShow", "zmap-pois", (on) => (showPois = on));
+
+// One chip per category, with its count; the chosen set is remembered as a JSON list of ids.
+function initPoiChips() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("zmap-poi-cats"));
+    if (Array.isArray(saved)) { poiCats.clear(); for (const id of saved) if (poiColor.has(id)) poiCats.add(id); }
+  } catch {}
+  const counts = new Map();
+  for (const p of POIS) counts.set(p.cat, (counts.get(p.cat) || 0) + 1);
+  $("poiCats").replaceChildren(...POI_CATEGORIES.map((c) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.setAttribute("aria-pressed", String(poiCats.has(c.id)));
+    const swatch = document.createElement("i");
+    swatch.className = "swatch";
+    swatch.style.background = c.color;
+    chip.append(swatch, `${c.label} ${counts.get(c.id) || 0}`);
+    chip.addEventListener("click", () => {
+      if (!poiCats.delete(c.id)) poiCats.add(c.id);
+      chip.setAttribute("aria-pressed", String(poiCats.has(c.id)));
+      try { localStorage.setItem("zmap-poi-cats", JSON.stringify([...poiCats])); } catch {}
+      redraw();
+    });
+    return chip;
+  }));
+}
+initPoiChips();
 
 async function poll() {
   if (!document.hidden) {
