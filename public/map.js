@@ -315,7 +315,7 @@ function drawPlayers() {
       ctx.strokeStyle = colors.get(p.name) || "#f2b134";
       ctx.lineWidth = 2.5 * (1 - ping) + 0.5;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, R + 1.4 + 20 * out, 0, Math.PI * 2);
+      ctx.arc(s.x, s.y, R + 1.4 + 11 * out, 0, Math.PI * 2);
       ctx.stroke();
       ctx.globalAlpha = fade;
     }
