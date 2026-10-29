@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  MAP, mapFromDescriptors, loadConfig, readPlayers, cleanDead, readBuildInfo,
+  MAP, mapFromDescriptors, loadConfig, readPlayers, cleanDead, cleanNames, readBuildInfo,
   readVersion, cleanSafehouses, readServerName, cleanGameTime, tilePaths, cacheTile, readCachedTile, createServer,
 } from "../server.js";
 import { prefetch, parseFloors } from "../prefetch.js";
@@ -572,4 +572,17 @@ test("dead markers: expiry also applies while the game server is down (stale, mi
 test("the dead-players file defaults to the tile cache folder, which the systemd unit lets the service write", () => {
   assert.equal(loadConfig({ TILE_CACHE_DIR: "/var/cache/zmap/tiles" }).stateFile, path.join("/var/cache/zmap/tiles", "dead-players.json"));
   assert.equal(loadConfig({ TILE_CACHE_DIR: "/c", STATE_FILE: "/x/d.json" }).stateFile, "/x/d.json");
+});
+
+test("dead markers: names the mod lists as cleared (alive but hidden) drop the saved marker", () => {
+  const { cfg, dataPath } = setup();
+  cfg.stateFile = path.join(dataPath, "dead.json");
+  const file = path.join(dataPath, "Lua", "zmap_players.txt");
+  const write = (o) => fs.writeFileSync(file, JSON.stringify({ t: 1, players: [], ...o }));
+  write({ dead: [{ name: "Admin", x: 1, y: 2, z: 0 }, { name: "Bob", x: 3, y: 4, z: 0 }] });
+  assert.deepEqual(readPlayers(cfg).dead.map((d) => d.name).sort(), ["Admin", "Bob"]);
+  write({ dead: [{ name: "Bob", x: 3, y: 4, z: 0 }], cleared: ["Admin", 7, ""] });
+  assert.deepEqual(readPlayers(cfg).dead.map((d) => d.name), ["Bob"], "Admin's marker is dropped, Bob's stays");
+  assert.deepEqual(cleanNames("x"), []);
+  assert.deepEqual(cleanNames(["a", 5, null, "b"]), ["a", "b"]);
 });

@@ -144,6 +144,11 @@ export function cleanDead(raw) {
     .map((d) => ({ name: d.name.slice(0, 64), x: d.x, y: d.y, z: Number.isFinite(d.z) ? d.z : 0 }));
 }
 
+// Names the mod says are alive but hidden (ghost-mode admins who had a death marker): list of strings only.
+export function cleanNames(raw) {
+  return Array.isArray(raw) ? raw.filter((n) => typeof n === "string" && n).slice(0, DEAD_MAX).map((n) => n.slice(0, 64)) : [];
+}
+
 function loadDead(cfg) {
   let m = deadStore.get(cfg.stateFile);
   if (m) return m;
@@ -163,11 +168,12 @@ function loadDead(cfg) {
 // `reported` is null when there is nothing new from the mod (stale, missing or unreadable file): then only
 // expiry applies. The mod keeps reporting a death until the player respawns, so an expired name is
 // remembered and not re-added while it is still reported.
-function updateDead(cfg, reported, alive, now) {
+function updateDead(cfg, reported, alive, now, cleared = []) {
   const m = loadDead(cfg);
   let expired = expiredStore.get(cfg.stateFile);
   if (!expired) expiredStore.set(cfg.stateFile, (expired = new Set()));
   let changed = false;
+  for (const n of cleared) if (m.delete(n)) changed = true;
   if (reported) {
     const names = new Set(reported.map((d) => d.name));
     for (const n of expired) if (alive.has(n) || !names.has(n)) expired.delete(n);
@@ -209,6 +215,7 @@ export function readPlayers(cfg, now = Date.now()) {
   let paused = null;
   let pois = null;
   let reportedDead = [];
+  let cleared = [];
   try {
     const data = JSON.parse(fs.readFileSync(file, "utf8"));
     safehouses = cleanSafehouses(data.safehouses);
@@ -216,6 +223,7 @@ export function readPlayers(cfg, now = Date.now()) {
     paused = typeof data.paused === "boolean" ? data.paused : null; // PauseEmpty froze the world
     pois = typeof data.pois === "boolean" ? data.pois : null; // the owner's SHOW_POIS flag; null = older mod
     reportedDead = cleanDead(data.dead);
+    cleared = cleanNames(data.cleared);
     players = (Array.isArray(data.players) ? data.players : [])
       .filter((p) => p && typeof p.name === "string" && Number.isFinite(p.x) && Number.isFinite(p.y))
       .map((p) => ({ name: p.name, x: p.x, y: p.y, z: Number.isFinite(p.z) ? p.z : 0, hp: Number.isFinite(p.hp) ? Math.max(0, Math.min(100, Math.round(p.hp))) : null, car: typeof p.car === "boolean" ? p.car : null }));
@@ -224,7 +232,7 @@ export function readPlayers(cfg, now = Date.now()) {
     return { ...base, players: [], dead: updateDead(cfg, null, new Set(), now), safehouses: [], gameTime: null, pois: null, error: "unreadable" };
   }
   // A stale file says nothing new about deaths or respawns; the remembered ones stay (until they expire).
-  const dead = updateDead(cfg, stale ? null : reportedDead, new Set(stale ? [] : players.map((p) => p.name)), now);
+  const dead = updateDead(cfg, stale ? null : reportedDead, new Set(stale ? [] : players.map((p) => p.name)), now, stale ? [] : cleared);
   // A stale file means the server (or mod) stopped: nobody is shown as online and the clock is
   // hidden (it would be frozen). Safehouses are persistent, so the last known ones stay on the map.
   return { ...base, players: stale ? [] : players, dead, safehouses, gameTime: stale ? null : gameTime, paused: stale ? null : paused, pois };
