@@ -569,6 +569,7 @@ function renderPlayers(data) {
     const z = clampFloor(d.z);
     const li = listItem(DEAD_COLOR, `${d.name} 💀`, `${z ? `${floorLabel(z)} · ` : ""}${d.x}, ${d.y} · ${ago(d.diedAt)}`, () => { centerOnGame(d.x, d.y); setFloor(z); });
     li.classList.add("dead");
+    li.querySelector(".swatch").classList.add("dead"); // the same cross as the map marker
     return li;
   });
   list.replaceChildren(...players.map((p) => {
