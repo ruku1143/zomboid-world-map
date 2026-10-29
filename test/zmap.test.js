@@ -509,3 +509,13 @@ test("readPlayers: the pois flag is a boolean from the mod, null if missing or j
   assert.equal(read(false, Date.now() + 60_000), false, "a stale file keeps the owner's choice");
   assert.equal(readPlayers(setup().cfg).pois, null, "no file at all");
 });
+
+test("the version is the same in package.json and both mod.info files (so the footer, the mod and the release tag agree)", () => {
+  const root = path.join(path.dirname(new URL(import.meta.url).pathname), "..");
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
+  assert.match(pkg, /^\d+\.\d+\.\d+$/, "package.json version is MAJOR.MINOR.PATCH");
+  for (const f of ["mod/ZMapPositions/mod.info", "mod/ZMapPositions/42/mod.info"]) {
+    const v = (fs.readFileSync(path.join(root, f), "utf8").match(/^modversion=(.*)$/m) || [])[1]?.trim();
+    assert.equal(v, pkg, `${f} modversion matches package.json`);
+  }
+});
