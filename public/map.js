@@ -505,12 +505,26 @@ $("floorUp").addEventListener("click", () => setFloor(floor + 1));
 $("floorDown").addEventListener("click", () => setFloor(floor - 1));
 $("floorLabel").addEventListener("click", () => setFloor(0));
 
-function centerOnGame(gx, gy) {
+// Glide to a spot; with `zoom`, also ease the zoom in to it (never zooms out past what it asks for).
+function centerOnGame(gx, gy, zoom) {
   const d = gameToDzi(gx, gy, meta.map);
   goal.x = d.x; goal.y = d.y; // glides there
   goal.ax = null; goal.ay = null;
+  if (zoom != null) goal.scale = Math.min(MAX_SCALE, Math.max(minScale, scaleForZoom(zoom, meta.map)));
   redraw();
   syncUrl();
+}
+
+// Zoom used when picking a player from the list: building scale, where POI names are readable.
+const FOCUS_ZOOM = 17.5;
+// Frame a whole safehouse (about half the viewport), kept within a sane zoom range.
+function focusSafehouse(h) {
+  const pts = safehouseCorners(h, meta.map);
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const bw = Math.max(...xs) - Math.min(...xs), bh = Math.max(...ys) - Math.min(...ys);
+  const fit = Math.min((innerWidth * 0.5) / Math.max(bw, 1), (innerHeight * 0.5) / Math.max(bh, 1));
+  const zoom = Math.min(19, Math.max(16.5, zoomForScale(fit, meta.map)));
+  centerOnGame(h.x + h.w / 2, h.y + h.h / 2, zoom);
 }
 
 // ---- players --------------------------------------------------------------
@@ -573,7 +587,7 @@ function renderPlayers(data) {
   const list = $("players");
   const deadRows = dead.map((d) => {
     const z = clampFloor(d.z);
-    const li = listItem(DEAD_COLOR, `${d.name} 💀`, `${z ? `${floorLabel(z)} · ` : ""}${d.x}, ${d.y} · ${ago(d.diedAt)}`, () => { centerOnGame(d.x, d.y); setFloor(z); });
+    const li = listItem(DEAD_COLOR, `${d.name} 💀`, `${z ? `${floorLabel(z)} · ` : ""}${d.x}, ${d.y} · ${ago(d.diedAt)}`, () => { centerOnGame(d.x, d.y, FOCUS_ZOOM); setFloor(z); });
     li.classList.add("dead");
     li.querySelector(".swatch").classList.add("dead"); // the same cross as the map marker
     return li;
@@ -581,7 +595,7 @@ function renderPlayers(data) {
   list.replaceChildren(...players.map((p) => {
     const z = clampFloor(p.z);
     const detail = `${p.hp == null ? "" : `${p.hp}% HP · `}${z ? `${floorLabel(z)} · ` : ""}${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
-    return listItem(colors.get(p.name), playerLabel(p), detail, () => { centerOnGame(p.x, p.y); setFloor(z); });
+    return listItem(colors.get(p.name), playerLabel(p), detail, () => { centerOnGame(p.x, p.y, FOCUS_ZOOM); setFloor(z); });
   }), ...deadRows);
   renderSafehouses(data.safehouses || []);
   poiAllowed = data.pois !== false;
@@ -612,7 +626,7 @@ function renderSafehouses(list) {
   $("safehouses").replaceChildren(...list.map((h) => {
     const others = h.members.filter((m) => m !== h.owner);
     const li = listItem(ownerColor(h), h.owner || h.title || "Safehouse", others.length ? `+ ${others.join(", ")}` : `${h.w}x${h.h}`,
-      () => centerOnGame(h.x + h.w / 2, h.y + h.h / 2));
+      () => focusSafehouse(h));
     li.title = `${h.title || "Safehouse"} · ${h.w}x${h.h} at ${h.x}, ${h.y}`;
     return li;
   }));
