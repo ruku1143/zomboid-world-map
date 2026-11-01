@@ -27,11 +27,21 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
 #toggle:hover { color: var(--text); }
 #players { list-style: none; margin: 0; padding: 0; }
 #players li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; border-bottom: 1px solid #ffffff14; }
+#players .follow { flex: none; width: 26px; height: 26px; padding: 0; border-radius: 50%; border-color: #ffffff30; color: var(--muted); line-height: 1; }
+#players .follow::before { content: "\25CE"; font-size: 15px; } /* ◎ */
+#players .follow:hover { color: var(--text); border-color: var(--muted); }
+#players .follow[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+#players li.following { background: #f2b13414; }
+#followChip { position: fixed; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 14px; background: var(--panel); border: 1px solid var(--accent); border-radius: 999px; white-space: nowrap; z-index: 5; }
+#followChip[hidden] { display: none; }
+#followChip button { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; line-height: 1; }
 #players li.dead { opacity: 0.7; } /* as on the map */
 #players li > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #players small { white-space: nowrap; }
 .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; border: 1.5px solid var(--bg, #12151a); box-shadow: 0 0 0 1px #ffffff40; }
 #players small { color: var(--muted); }
+#plHead { display: flex; justify-content: space-between; align-items: center; padding-bottom: 2px; }
+#plHead label { color: var(--muted); font-size: 12px; cursor: pointer; }
 #shHead { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #ffffff14; }
 #shHead[hidden] { display: none; }
 #shHead label { color: var(--muted); font-size: 12px; cursor: pointer; }
