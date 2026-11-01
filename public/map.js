@@ -677,7 +677,7 @@ function renderPlayers(data) {
   });
   list.replaceChildren(...players.map((p) => {
     const z = clampFloor(p.z);
-    const detail = `${p.hp == null ? "" : `${p.hp}% HP · `}${z ? `${floorLabel(z)} · ` : ""}${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
+    const detail = `${p.hp == null ? "" : `${p.hp}% HP · `}${z ? `${floorLabel(z)} · ` : ""}${p.x}, ${p.y}`; // no "Ns ago": the status line already says how fresh the data is
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "follow";
