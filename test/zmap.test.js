@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   MAP, mapFromDescriptors, loadConfig, readPlayers, cleanDead, cleanNames, readBuildInfo,
-  readVersion, cleanSafehouses, readServerName, cleanGameTime, tilePaths, cacheTile, readCachedTile, createServer,
+  readVersion, cleanSafehouses, cleanNonPvpZones, cleanUtilities, readServerName, cleanGameTime, tilePaths, cacheTile, readCachedTile, createServer,
 } from "../server.js";
 import { prefetch, parseFloors } from "../prefetch.js";
 import { TOWNS } from "../public/towns.js";
@@ -111,6 +111,55 @@ test("readPlayers returns safehouses, and keeps them when the file goes stale", 
   fs.writeFileSync(file, JSON.stringify({ t: 1, players: [] }));
   assert.deepEqual(readPlayers(cfg).safehouses, []);
   assert.deepEqual(readPlayers(setup().cfg).safehouses, []);
+});
+
+test("cleanNonPvpZones keeps well-formed zones, drops junk, and says null when not shared", () => {
+  const good = { title: "Spawn", x: 1, y: 2, w: 10, h: 12 };
+  const out = cleanNonPvpZones([good, null, { x: 1, y: 2, w: 0, h: 5 }, { x: "1", y: 2, w: 3, h: 3 }, { x: 5, y: 5, w: 3, h: 3 }]);
+  assert.deepEqual(out, [good, { title: "", x: 5, y: 5, w: 3, h: 3 }]);
+  assert.equal(cleanNonPvpZones(undefined), null, "an older mod writes no field");
+  assert.equal(cleanNonPvpZones(null), null, "the owner switched them off");
+  assert.equal(cleanNonPvpZones("zones"), null);
+  assert.deepEqual(cleanNonPvpZones([]), [], "shared, but there are none");
+  assert.equal(cleanNonPvpZones(Array.from({ length: 300 }, () => good)).length, 200);
+  assert.equal(cleanNonPvpZones([{ ...good, title: "x".repeat(200) }])[0].title.length, 64);
+});
+
+test("readPlayers returns non-PvP zones, keeps them when stale, and null when not shared", () => {
+  const { cfg, dataPath } = setup();
+  const file = path.join(dataPath, "Lua", "zmap_players.txt");
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [], nonPvpZones: [{ title: "Spawn", x: 3, y: 4, w: 5, h: 6 }] }));
+  const now = Date.now();
+  assert.equal(readPlayers(cfg, now).nonPvpZones.length, 1);
+  assert.equal(readPlayers(cfg, now + 10 * 60 * 1000).nonPvpZones.length, 1, "zones are persistent, so the last known stay");
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [], nonPvpZones: null }));
+  assert.equal(readPlayers(cfg).nonPvpZones, null);
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [] }));
+  assert.equal(readPlayers(cfg).nonPvpZones, null);
+  assert.equal(readPlayers(setup().cfg).nonPvpZones, null);
+});
+
+test("cleanUtilities keeps booleans, turns anything else into null, and null when not shared", () => {
+  assert.deepEqual(cleanUtilities({ water: true, power: false }), { water: true, power: false });
+  assert.deepEqual(cleanUtilities({ water: true, power: null }), { water: true, power: null });
+  assert.deepEqual(cleanUtilities({ water: "yes", power: 1 }), null, "non-booleans are unknown, and nothing known means not shared");
+  assert.deepEqual(cleanUtilities({ water: "yes", power: false }), { water: null, power: false });
+  assert.equal(cleanUtilities(undefined), null, "an older mod writes no field");
+  assert.equal(cleanUtilities(null), null, "the owner switched it off");
+  assert.equal(cleanUtilities([true, false]), null);
+  assert.equal(cleanUtilities("on"), null);
+});
+
+test("readPlayers returns utilities, and hides them when the file goes stale like the clock", () => {
+  const { cfg, dataPath } = setup();
+  const file = path.join(dataPath, "Lua", "zmap_players.txt");
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [], utilities: { water: false, power: true } }));
+  const now = Date.now();
+  assert.deepEqual(readPlayers(cfg, now).utilities, { water: false, power: true });
+  assert.equal(readPlayers(cfg, now + 10 * 60 * 1000).utilities, null, "a frozen world's utilities would be out of date");
+  fs.writeFileSync(file, JSON.stringify({ t: 1, players: [] }));
+  assert.equal(readPlayers(cfg).utilities, null);
+  assert.equal(readPlayers(setup().cfg).utilities, null);
 });
 
 test("edge tiles cover only their real share of the cell", () => {

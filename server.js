@@ -131,6 +131,26 @@ export function cleanSafehouses(raw) {
     }));
 }
 
+// Non-PvP zones, written like safehouses (x, y, w, h in game tiles). null means the mod isn't sharing
+// them (older mod, or the owner switched SHOW_NONPVP_ZONES off), which is different from "none".
+const NONPVP_MAX = 200;
+export function cleanNonPvpZones(raw) {
+  if (!Array.isArray(raw)) return null;
+  return raw
+    .filter((z) => z && [z.x, z.y, z.w, z.h].every(Number.isFinite) && z.w > 0 && z.h > 0)
+    .slice(0, NONPVP_MAX)
+    .map((z) => ({ title: clip(z.title, 64), x: z.x, y: z.y, w: z.w, h: z.h }));
+}
+
+// Whether the world's water and power are on: true/false each, null when the mod can't tell. The whole
+// field is null when the mod isn't sharing it (older mod, or the owner switched SHOW_UTILITIES off).
+export function cleanUtilities(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const bool = (v) => (typeof v === "boolean" ? v : null);
+  const out = { water: bool(raw.water), power: bool(raw.power) };
+  return out.water === null && out.power === null ? null : out;
+}
+
 // ---- dead players: the mod reports a death while it knows of one, the server keeps it ----
 const DEAD_MAX = 200;
 const deadStore = new Map(); // state file -> Map(name -> {name, x, y, z, diedAt})
@@ -203,7 +223,7 @@ export function readPlayers(cfg, now = Date.now()) {
   try {
     stat = fs.statSync(file);
   } catch {
-    return { available: false, stale: true, reason: "no-file", updatedAt: null, players: [], dead: updateDead(cfg, null, new Set(), now), safehouses: [], gameTime: null, pois: null };
+    return { available: false, stale: true, reason: "no-file", updatedAt: null, players: [], dead: updateDead(cfg, null, new Set(), now), safehouses: [], nonPvpZones: null, utilities: null, gameTime: null, pois: null };
   }
   const ageMs = now - stat.mtimeMs;
   const staleAfterMs = Math.max(cfg.refreshSeconds, MOD_INTERVAL_SECONDS) * 3000;
@@ -211,6 +231,8 @@ export function readPlayers(cfg, now = Date.now()) {
   const base = { available: true, stale, reason: stale ? "stale" : null, ageSeconds: Math.round(ageMs / 1000), updatedAt: stat.mtimeMs };
   let players = [];
   let safehouses = [];
+  let nonPvpZones = null;
+  let utilities = null;
   let gameTime = null;
   let paused = null;
   let pois = null;
@@ -219,6 +241,8 @@ export function readPlayers(cfg, now = Date.now()) {
   try {
     const data = JSON.parse(fs.readFileSync(file, "utf8"));
     safehouses = cleanSafehouses(data.safehouses);
+    nonPvpZones = cleanNonPvpZones(data.nonPvpZones);
+    utilities = cleanUtilities(data.utilities);
     gameTime = cleanGameTime(data.time);
     paused = typeof data.paused === "boolean" ? data.paused : null; // PauseEmpty froze the world
     pois = typeof data.pois === "boolean" ? data.pois : null; // the owner's SHOW_POIS flag; null = older mod
@@ -229,13 +253,13 @@ export function readPlayers(cfg, now = Date.now()) {
       .map((p) => ({ name: p.name, x: p.x, y: p.y, z: Number.isFinite(p.z) ? p.z : 0, hp: Number.isFinite(p.hp) ? Math.max(0, Math.min(100, Math.round(p.hp))) : null, car: typeof p.car === "boolean" ? p.car : null }));
   } catch {
     // Mid-write read; the client keeps its last good state and retries.
-    return { ...base, players: [], dead: updateDead(cfg, null, new Set(), now), safehouses: [], gameTime: null, pois: null, error: "unreadable" };
+    return { ...base, players: [], dead: updateDead(cfg, null, new Set(), now), safehouses: [], nonPvpZones: null, utilities: null, gameTime: null, pois: null, error: "unreadable" };
   }
   // A stale file says nothing new about deaths or respawns; the remembered ones stay (until they expire).
   const dead = updateDead(cfg, stale ? null : reportedDead, new Set(stale ? [] : players.map((p) => p.name)), now, stale ? [] : cleared);
   // A stale file means the server (or mod) stopped: nobody is shown as online and the clock is
-  // hidden (it would be frozen). Safehouses are persistent, so the last known ones stay on the map.
-  return { ...base, players: stale ? [] : players, dead, safehouses, gameTime: stale ? null : gameTime, paused: stale ? null : paused, pois };
+  // hidden (it would be frozen). Safehouses and non-PvP zones are persistent, so the last known ones stay on the map.
+  return { ...base, players: stale ? [] : players, dead, safehouses, nonPvpZones, utilities: stale ? null : utilities, gameTime: stale ? null : gameTime, paused: stale ? null : paused, pois };
 }
 
 // ---- game version ---------------------------------------------------------

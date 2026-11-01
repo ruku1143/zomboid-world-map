@@ -19,6 +19,8 @@ const DEAD_COLOR = "#7b8088";
 let colors = new Map();
 let safehouses = [];
 let showSafehouses = true;
+let nonPvpZones = []; // the mod says null when zones are not shared; then the layer and its panel section are hidden
+let showZones = true;
 let showPlayers = true;
 let showTowns = true;
 let showPois = true;
@@ -168,6 +170,7 @@ function draw() {
       drawTile(level, c, r, s.x, s.y, span * cam.scale);
     }
   }
+  if (showZones) drawNonPvpZones();
   if (showSafehouses) drawSafehouses();
   if (showTowns) drawTowns();
   if (showPois && poiAllowed) drawPois();
@@ -188,6 +191,36 @@ function haloText(text, x, y, width, fill = TEXT) {
   ctx.strokeText(text, x, y);
   ctx.fillStyle = fill;
   ctx.fillText(text, x, y);
+}
+
+// Non-PvP zones: a soft blue-green fill and dashed outline, under the safehouses.
+const ZONE_COLOR = "#3ecfb2";
+function drawNonPvpZones() {
+  ctx.font = "600 12px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const z of nonPvpZones) {
+    const pts = safehouseCorners(z, meta.map).map((d) => toScreen(d.x, d.y));
+    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    if (maxX < 0 || maxY < 0 || minX > innerWidth || minY > innerHeight) continue;
+    ctx.beginPath();
+    pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+    ctx.closePath();
+    ctx.globalAlpha = 0.16;
+    ctx.fillStyle = ZONE_COLOR;
+    ctx.fill();
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 5]);
+    ctx.strokeStyle = ZONE_COLOR;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+    // Label only when the outline is big enough to hold it.
+    if (maxX - minX > 90) haloText(z.title || "Non-PvP", (minX + maxX) / 2, (minY + maxY) / 2, 3, ZONE_COLOR);
+  }
+  ctx.textAlign = "start";
 }
 
 function drawSafehouses() {
@@ -566,7 +599,7 @@ function centerOnGame(gx, gy, zoom) {
 
 // Zoom used when picking a player from the list: building scale, where POI names are readable.
 const FOCUS_ZOOM = 17.5;
-// Frame a whole safehouse (about half the viewport), kept within a sane zoom range.
+// Frame a whole safehouse or zone (about half the viewport), kept within a sane zoom range.
 function focusSafehouse(h) {
   const pts = safehouseCorners(h, meta.map);
   const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
@@ -659,10 +692,12 @@ function renderPlayers(data) {
   }), ...deadRows);
   if (following !== null && !players.some((p) => p.name === following)) stopFollow();
   renderSafehouses(data.safehouses || []);
+  renderZones(data.nonPvpZones);
   poiAllowed = data.pois !== false;
   $("poiHead").hidden = $("poiCats").hidden = !poiAllowed;
   syncPoiHint();
   $("clock").textContent = data.gameTime ? formatGameTime(data.gameTime) : "";
+  renderUtilities(data.utilities);
   $("empty").hidden = players.length + dead.length > 0;
   const note = data.reason === "no-file"
     ? "Positions file not found. Is the ZMapPositions mod loaded?"
@@ -694,6 +729,28 @@ function renderSafehouses(list) {
   $("shHead").hidden = list.length === 0;
 }
 
+// null = the mod isn't sharing zones (older mod, or switched off): hide the layer and its panel section.
+function renderZones(list) {
+  nonPvpZones = Array.isArray(list) ? list : [];
+  $("zones").replaceChildren(...nonPvpZones.map((z) => {
+    const li = listItem(ZONE_COLOR, z.title || "Non-PvP zone", `${z.w}x${z.h}`, () => focusSafehouse(z));
+    li.title = `${z.title || "Non-PvP zone"} · ${z.w}x${z.h} at ${z.x}, ${z.y}`;
+    return li;
+  }));
+  $("zoneHead").hidden = nonPvpZones.length === 0;
+}
+
+// Water and power icons next to the clock: hidden when the mod doesn't share (null), dimmed and struck through when off.
+function renderUtilities(u) {
+  for (const [id, label] of [["water", "Water"], ["power", "Power"]]) {
+    const el = $(id), on = u ? u[id] : null;
+    el.hidden = typeof on !== "boolean";
+    el.classList.toggle("off", on === false);
+    el.title = el.ariaLabel = `${label} is ${on ? "on" : "off"}`;
+  }
+  $("utils").hidden = $("water").hidden && $("power").hidden;
+}
+
 // A checkbox whose state is remembered in localStorage (on unless it was turned off).
 function persistedToggle(id, key, set) {
   let on = true;
@@ -706,6 +763,7 @@ function persistedToggle(id, key, set) {
     redraw();
   });
 }
+persistedToggle("zoneShow", "zmap-nonpvp", (on) => (showZones = on));
 persistedToggle("plShow", "zmap-players", (on) => (showPlayers = on));
 persistedToggle("shShow", "zmap-safehouses", (on) => (showSafehouses = on));
 persistedToggle("townsShow", "zmap-towns", (on) => (showTowns = on));
