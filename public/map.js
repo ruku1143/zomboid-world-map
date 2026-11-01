@@ -506,7 +506,9 @@ $("floorDown").addEventListener("click", () => setFloor(floor - 1));
 $("floorLabel").addEventListener("click", () => setFloor(0));
 
 // Glide to a spot; with `zoom`, also ease the zoom in to it (never zooms out past what it asks for).
+const phone = matchMedia("(max-width: 600px)");
 function centerOnGame(gx, gy, zoom) {
+  if (phone.matches) setPanel(false); // the bottom sheet would cover the spot we are flying to
   const d = gameToDzi(gx, gy, meta.map);
   goal.x = d.x; goal.y = d.y; // glides there
   goal.ax = null; goal.ay = null;
@@ -728,10 +730,12 @@ async function init() {
   poll();
 }
 
-$("toggle").addEventListener("click", () => {
-  const expanded = !$("panel").classList.toggle("hidden");
-  $("toggle").setAttribute("aria-expanded", String(expanded));
-});
+function setPanel(open) {
+  $("panel").classList.toggle("hidden", !open);
+  $("toggle").setAttribute("aria-expanded", String(open));
+}
+$("toggle").addEventListener("click", () => setPanel($("panel").classList.contains("hidden")));
+$("sheetClose").addEventListener("click", () => setPanel(false));
 // The top bar wraps on narrow screens, so things pinned under it follow its real height.
 if (window.ResizeObserver) {
   new ResizeObserver(() => document.documentElement.style.setProperty("--bar-h", `${$("bar").offsetHeight}px`)).observe($("bar"));
