@@ -3,7 +3,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
+html, body { touch-action: manipulation; /* no double-tap zoom on buttons and the panel; the map canvas handles its own pinch */ -webkit-tap-highlight-color: transparent; margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
 #map { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 #map.drag { cursor: grabbing; }
 #bar { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: 12px; align-items: center; padding: 8px 16px; padding-top: max(8px, env(safe-area-inset-top)); background: var(--panel); }
@@ -21,7 +21,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 #utils[hidden], .util[hidden] { display: none; }
 .util { font-size: 14px; line-height: 1; }
 .util.off { opacity: 0.45; filter: grayscale(1); text-decoration: line-through; text-decoration-color: var(--warn); text-decoration-thickness: 2px; }
-button { background: transparent; color: var(--text); border: 1px solid var(--muted); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
+button { touch-action: manipulation; user-select: none; -webkit-user-select: none; background: transparent; color: var(--text); border: 1px solid var(--muted); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
 #panel { position: fixed; top: var(--bar-h, 48px); right: 0; width: 340px; max-height: calc(100% - 100px); transition: transform 0.2s ease; }
 #panel.hidden { transform: translateX(100%); }
 #panelBody { max-height: calc(100vh - var(--bar-h, 48px) - 100px); overflow: auto; background: var(--panel); padding: 8px 16px; border-radius: 0 0 0 8px; }
