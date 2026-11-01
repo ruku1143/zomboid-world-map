@@ -54,7 +54,7 @@ browser <──/api/players, /api/meta, /tiles/*── server.js ──(curl, ca
 
 ## Gotchas
 - Tiles at the right and bottom edge of a level are smaller than the tile size; draw them at their real size or terrain drifts away from the player dots (`exactTileRect`, `parentCrop`).
-- A 404 from the tile host means "nothing rendered here", not an error: draw nothing, and don't substitute coarser tiles.
+- A 404 from the tile host means "nothing rendered here", not an error. On the ground floor draw nothing and don't substitute coarser tiles. Upper floors are sparse: the host only renders a tile where something is on that floor, yet any tile that exists carries the terrain for its whole area, so a 404 next to a building is a hole in otherwise good ground. `drawTile` fills those from the nearest existing ancestor (floors other than 0 only).
 - The map is the 42.20.0 render while servers may run 42.21.x; only a major-version change shows the red banner.
 - Hidden or unreadable mod fields must come through as `null`, not be dropped or defaulted to a real value.
 - Browsers cache favicons hard; a hard refresh is needed to see icon changes.

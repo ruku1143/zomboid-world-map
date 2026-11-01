@@ -8,6 +8,7 @@ const ctx = canvas.getContext("2d");
 let minScale = 0.001; // set from MIN_ZOOM once the map geometry is known
 const MAX_SCALE = 1;
 const MAX_FALLBACK = 4;
+const MAX_FALLBACK_SPARSE = 6; // upper floors skip empty tiles, so the nearest tile that exists can be further up
 const MAX_LOADS = 8;
 
 let meta = null;
@@ -102,21 +103,30 @@ function pump() {
 }
 
 // Draws the exact tile, or a stand-in from a coarser level while it loads or after an
-// error. Nothing is drawn for an "empty" tile: the host has no map there.
+// error. On the ground floor nothing is drawn for an "empty" tile: the host has no map there.
+// Upper floors are different: the host only renders a tile where something is on that floor, but
+// any tile that exists carries the terrain for its whole area, so around a building the finer
+// tiles 404 while the coarser ones still have the ground. Those gaps are filled from the nearest
+// ancestor that exists (blurrier, but not a hole).
 function drawTile(l, c, r, x, y, size) {
   const t = tiles.get(tileKey(l, c, r));
-  if (t === "empty") return;
+  const sparse = floor !== 0;
+  if (t === "empty" && !sparse) return;
   if (isReady(t)) {
     touch(tileKey(l, c, r));
     const d = exactTileRect(t.width, t.height, size, meta.map);
     ctx.drawImage(t, x, y, d.w + 1, d.h + 1);
     return;
   }
-  for (let up = 1, pc = c, pr = r; up <= MAX_FALLBACK && l - up >= 0; up++) {
+  const reach = sparse ? MAX_FALLBACK_SPARSE : MAX_FALLBACK;
+  for (let up = 1, pc = c, pr = r; up <= reach && l - up >= 0; up++) {
     pc >>= 1; pr >>= 1;
     const pl = l - up;
     const parent = tiles.get(tileKey(pl, pc, pr));
-    if (parent === "empty") return;
+    if (parent === "empty") {
+      if (!sparse) return;
+      continue; // nothing rendered at this level either: try a coarser one
+    }
     if (isReady(parent)) {
       touch(tileKey(pl, pc, pr));
       const k = parentCrop(c, r, up, parent.width, parent.height, meta.map);
