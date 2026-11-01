@@ -1,4 +1,4 @@
-import { gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, stepCamera, PAN_MS, assignColors, colorForName, safehouseCorners, parseView, MIN_ZOOM, clampFloor, floorLabel, parseFloor, FLOOR_MIN, FLOOR_MAX, POI_CATEGORIES } from "./projection.js";
+import { hpColor, gameToDzi, dziToGame, scaleForZoom, zoomForScale, levelForScale, tileSpan, exactTileRect, parentCrop, stepCamera, PAN_MS, assignColors, colorForName, safehouseCorners, parseView, MIN_ZOOM, clampFloor, floorLabel, parseFloor, FLOOR_MIN, FLOOR_MAX, POI_CATEGORIES } from "./projection.js";
 import { TOWNS } from "./towns.js";
 import { POIS } from "./pois.js";
 
@@ -381,7 +381,7 @@ function drawPlayers() {
       const w = 22, x = s.x - w / 2, y = s.y + 12;
       ctx.fillStyle = BG;
       ctx.fillRect(x - 1, y - 1, w + 2, 6);
-      ctx.fillStyle = `hsl(${Math.round(p.hp * 1.2)}, 75%, 50%)`;
+      ctx.fillStyle = hpColor(p.hp);
       ctx.fillRect(x, y, (w * p.hp) / 100, 4);
     }
     haloText(playerLabel(p), s.x + 14, s.y, 3);
@@ -629,7 +629,7 @@ function listItem(color, label, detail, onClick, extra) {
   swatch.style.background = color;
   name.append(swatch, label);
   const sub = document.createElement("small");
-  sub.textContent = detail;
+  sub.append(detail); // text, or an element (the health bar)
   li.append(name, sub);
   if (extra) li.append(extra);
   li.addEventListener("click", onClick);
@@ -677,7 +677,21 @@ function renderPlayers(data) {
   });
   list.replaceChildren(...players.map((p) => {
     const z = clampFloor(p.z);
-    const detail = `${p.hp == null ? "" : `${p.hp}% HP · `}${z ? `${floorLabel(z)} · ` : ""}${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
+    // The same health bar as under the map dot; no "Ns ago": the status line already says how fresh the data is.
+    const detail = document.createElement("span");
+    if (p.hp != null) {
+      const bar = document.createElement("span");
+      bar.className = "hp";
+      bar.title = `${p.hp}% HP`;
+      bar.setAttribute("role", "img");
+      bar.setAttribute("aria-label", `${p.hp}% HP`);
+      const fill = document.createElement("i");
+      fill.style.width = `${p.hp}%`;
+      fill.style.background = hpColor(p.hp);
+      bar.append(fill);
+      detail.append(bar);
+    }
+    detail.append(`${z ? `${floorLabel(z)} · ` : ""}${p.x}, ${p.y}`);
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "follow";

@@ -45,6 +45,8 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
 #players small { white-space: nowrap; }
 .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; border: 1.5px solid var(--bg, #12151a); box-shadow: 0 0 0 1px #ffffff40; }
 #players small { color: var(--muted); }
+#players .hp { display: inline-block; vertical-align: middle; width: 24px; height: 6px; margin-right: 8px; padding: 1px; background: var(--bg); } /* the map dot's bar: 22x4 on a dark track */
+#players .hp i { display: block; height: 4px; }
 #plHead { display: flex; justify-content: space-between; align-items: center; padding-bottom: 2px; }
 #plHead label { color: var(--muted); font-size: 12px; cursor: pointer; }
 #shHead { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #ffffff14; }
