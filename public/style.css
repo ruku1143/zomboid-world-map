@@ -16,6 +16,11 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 #status { color: var(--muted); flex: 1; font-size: 13px; }
 #clock { color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #clock:empty { display: none; }
+/* Water and power: a small icon each, dim and struck through when that utility has shut off. */
+#utils { display: inline-flex; gap: 6px; white-space: nowrap; }
+#utils[hidden], .util[hidden] { display: none; }
+.util { font-size: 14px; line-height: 1; }
+.util.off { opacity: 0.45; filter: grayscale(1); text-decoration: line-through; text-decoration-color: var(--warn); text-decoration-thickness: 2px; }
 button { background: transparent; color: var(--text); border: 1px solid var(--muted); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
 #panel { position: fixed; top: var(--bar-h, 48px); right: 0; width: 340px; max-height: calc(100% - 100px); transition: transform 0.2s ease; }
 #panel.hidden { transform: translateX(100%); }
@@ -38,6 +43,12 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
 #safehouses { list-style: none; margin: 0; padding: 0; }
 #safehouses li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; cursor: pointer; border-bottom: 1px solid #ffffff14; }
 #safehouses small { color: var(--muted); text-align: right; }
+#zoneHead { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #ffffff14; }
+#zoneHead[hidden] { display: none; }
+#zoneHead label { color: var(--muted); font-size: 12px; cursor: pointer; }
+#zones { list-style: none; margin: 0; padding: 0; }
+#zones li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; cursor: pointer; border-bottom: 1px solid #ffffff14; }
+#zones small { color: var(--muted); text-align: right; }
 #poiHead { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #ffffff14; }
 #poiHead[hidden], #poiCats[hidden], #poiHint[hidden] { display: none; }
 #poiHint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
@@ -76,10 +87,11 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
   #banner { right: 16px; }
   #coords { bottom: auto; top: var(--bar-h, 48px); border-radius: 0 0 8px 0; }
   /* Row 1: title and state pill. Row 2: status text, with the game clock at the right. */
-  #bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 8px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); }
+  #bar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 4px 8px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); }
   #title { grid-column: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #state { grid-column: 2; grid-row: 1; }
+  #state { grid-column: 2 / 4; grid-row: 1; justify-self: end; }
   #status { grid-column: 1; grid-row: 2; font-size: 12px; min-width: 0; }
-  #clock { grid-column: 2; grid-row: 2; justify-self: end; font-size: 12px; }
+  #utils { grid-column: 2; grid-row: 2; justify-self: end; }
+  #clock { grid-column: 3; grid-row: 2; justify-self: end; font-size: 12px; }
   #version { display: none; }
 }

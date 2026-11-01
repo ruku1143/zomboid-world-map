@@ -3,7 +3,9 @@
 -- reads no commands and changes nothing in the game. Players that disconnect are simply
 -- absent from the next write, as are invisible/ghost-mode admins. Players that die are
 -- listed under "dead" (where they died) until the same username is alive again. It also writes
--- whether the map should show its points-of-interest layer (the SHOW_POIS option).
+-- whether the map should show its points-of-interest layer (the SHOW_POIS option) and the server's
+-- non-PvP zones (the SHOW_NONPVP_ZONES option), and whether the world's water and power are still on
+-- (the SHOW_UTILITIES option).
 --
 -- Build 42 getFileWriter only accepts a small extension whitelist (.txt is fine,
 -- .json is rejected and returns nil) and Lua cannot create folders, so the JSON
@@ -17,6 +19,8 @@ local SHOW_IN_VEHICLE = true        -- a car icon next to players who are drivin
 local HIDE_INVISIBLE_ADMINS = true  -- leave invisible / ghost-mode admins off the map
 local SHOW_POIS = true              -- the points-of-interest layer (a fixed list of buildings; shares nothing about players)
 local SHOW_DEATHS = true            -- keep a greyed-out marker where a player died, until they respawn
+local SHOW_NONPVP_ZONES = true      -- outline the server's non-PvP zones on the map (a fixed list of areas; shares nothing about players)
+local SHOW_UTILITIES = true         -- whether the world's water and power are still on, in the top bar (shares nothing about players)
 
 local INTERVAL_MS = 1000
 local FILE_NAME = "zmap_players.txt"
@@ -50,6 +54,65 @@ local function jsonString(s)
     s = tostring(s or "")
     s = s:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("[%c]", " ")
     return '"' .. s .. '"'
+end
+
+-- Non-PvP zones are a server-side list of rectangles (x, y to x2, y2), so like safehouses they do not
+-- need a player nearby. One zone that can't be read is skipped rather than losing the rest.
+local function readNonPvpZones()
+    local out = {}
+    if not (NonPvpZone and NonPvpZone.getAllZones) then return out end
+    local list = NonPvpZone.getAllZones()
+    if not list then return out end
+    for i = 0, list:size() - 1 do
+        local entry = guarded("non-PvP zone skipped", nil, function()
+            local z = list:get(i)
+            if not z then return nil end
+            local x1, y1, x2, y2 = math.floor(z:getX()), math.floor(z:getY()), math.floor(z:getX2()), math.floor(z:getY2())
+            local title = guarded("non-PvP zone title unavailable", "", function() return z:getTitle() end)
+            return string.format('{"title":%s,"x":%d,"y":%d,"w":%d,"h":%d}',
+                jsonString(title), math.min(x1, x2), math.min(y1, y2), math.abs(x2 - x1), math.abs(y2 - y1))
+        end)
+        if entry then table.insert(out, entry) end
+    end
+    return out
+end
+
+-- Whether the world's water and power are still on: "true" / "false", or "null" when it cannot be told.
+-- UNVERIFIED in a running Build 42 server (the owner should confirm in-game), so each utility tries
+-- several routes inside pcall and the first that gives an answer wins:
+--   power: getWorld():isHydroPowerOn() if it exists (the game's own flag), else the sandbox shut-off below;
+--   water: the sandbox shut-off below (WaterShutModifier).
+-- Sandbox shut-off: the modifier is the in-game day on which the utility goes off, so it is on while
+-- getGameTime():getNightsSurvived() is below it; a negative modifier is taken to mean "never shuts off"
+-- (a guess; if a server with "instant" shows the wrong state, that is the line to fix).
+local function sandboxNumber(name)
+    local v = SandboxVars and SandboxVars[name]
+    if type(v) == "number" then return v end
+    local so = getSandboxOptions and getSandboxOptions()
+    if so then
+        local ok, n = pcall(function() return so["get" .. name](so) end)
+        if ok and type(n) == "number" then return n end
+    end
+    return nil
+end
+
+local function utilityOnBySandbox(name)
+    local mod = sandboxNumber(name)
+    local nights = getGameTime and getGameTime():getNightsSurvived()
+    if type(mod) ~= "number" or type(nights) ~= "number" then return "null" end
+    if mod < 0 then return "true" end
+    return nights < mod and "true" or "false"
+end
+
+local function readUtilities()
+    if not SHOW_UTILITIES then return "null" end
+    local power = guarded("power state unavailable", "null", function()
+        local w = getWorld and getWorld()
+        if w and w.isHydroPowerOn then return w:isHydroPowerOn() and "true" or "false" end
+        return utilityOnBySandbox("ElecShutModifier")
+    end)
+    local water = guarded("water state unavailable", "null", function() return utilityOnBySandbox("WaterShutModifier") end)
+    return string.format('{"water":%s,"power":%s}', water, power)
 end
 
 -- Safehouses are a server-side list, so unlike world squares they do not need a player nearby.
@@ -190,11 +253,18 @@ local function writePositions()
         if pos then table.insert(deadParts, deadJson(name, pos)) end
     end
     local safehouses = guarded("safehouses unavailable", {}, readSafehouses)
+    -- "null" (not an empty list) when the owner switched zones off or they can't be read: the page hides the layer.
+    local nonPvpZones = "null"
+    if SHOW_NONPVP_ZONES then
+        local zones = guarded("non-PvP zones unavailable", nil, readNonPvpZones)
+        if zones then nonPvpZones = "[" .. table.concat(zones, ",") .. "]" end
+    end
     local gameTime = guarded("game time unavailable", "null", readGameTime)
+    local utilities = guarded("utilities unavailable", "null", readUtilities)
     local writer = getFileWriter(FILE_NAME, true, false)
     if not writer then error("getFileWriter returned nil for " .. FILE_NAME) end
-    writer:write(string.format('{"t":%d,"time":%s,"paused":%s,"pois":%s,"players":[%s],"dead":[%s],"cleared":[%s],"safehouses":[%s]}',
-        math.floor(nowMs() / 1000), gameTime, paused, tostring(SHOW_POIS), table.concat(parts, ","), table.concat(deadParts, ","), table.concat(clearedParts, ","), table.concat(safehouses, ",")))
+    writer:write(string.format('{"t":%d,"time":%s,"paused":%s,"pois":%s,"players":[%s],"dead":[%s],"cleared":[%s],"safehouses":[%s],"nonPvpZones":%s,"utilities":%s}',
+        math.floor(nowMs() / 1000), gameTime, paused, tostring(SHOW_POIS), table.concat(parts, ","), table.concat(deadParts, ","), table.concat(clearedParts, ","), table.concat(safehouses, ","), nonPvpZones, utilities))
     writer:close()
 end
 

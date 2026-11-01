@@ -15,6 +15,7 @@
   <span id="state" class="pill" role="status"></span>
   <span id="status" role="status"></span>
   <span id="clock" title="In-game date and time"></span>
+  <span id="utils" hidden><span id="water" class="util" hidden role="img">💧</span><span id="power" class="util" hidden role="img">⚡</span></span>
 </header>
 <aside id="panel">
   <button id="toggle" type="button" aria-expanded="true" aria-controls="panelBody" aria-label="Hide players panel" title="Show or hide the players panel"></button>
@@ -23,6 +24,8 @@
   <p id="empty">Nobody is online.</p>
   <div id="shHead"><strong>Safehouses</strong><label><input type="checkbox" id="shShow" checked> Show on map</label></div>
   <ul id="safehouses"></ul>
+  <div id="zoneHead" hidden><strong>Non-PvP zones</strong><label><input type="checkbox" id="zoneShow" checked> Show on map</label></div>
+  <ul id="zones"></ul>
   <div id="poiHead"><strong>Points of interest</strong><label><input type="checkbox" id="poiShow" checked> Show on map</label></div>
   <div id="poiCats"></div>
   <p id="poiHint" hidden>No categories selected, so no points of interest are shown.</p>
