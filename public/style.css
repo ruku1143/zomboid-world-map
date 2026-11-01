@@ -8,7 +8,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 #map.drag { cursor: grabbing; }
 #bar { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: 12px; align-items: center; padding: 8px 16px; padding-top: max(8px, env(safe-area-inset-top)); background: var(--panel); }
 #state:empty { display: none; }
-.pill { font-size: 12px; padding: 2px 10px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.pill { font-size: 12px; padding: 2px 10px; border-radius: 6px; border: 1px solid currentColor; white-space: nowrap; }
 .pill.online { color: #3fb950; }
 .pill.offline { color: var(--warn); }
 .pill.paused { color: #58a6ff; }
@@ -32,14 +32,14 @@ button { background: transparent; color: var(--text); border: 1px solid var(--mu
 #toggle:hover { color: var(--text); }
 #players { list-style: none; margin: 0; padding: 0; }
 #players li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; border-bottom: 1px solid #ffffff14; }
-#players .follow { flex: none; width: 26px; height: 26px; padding: 0; border-radius: 50%; border-color: #ffffff30; color: var(--muted); line-height: 1; }
+#players .follow { flex: none; width: 26px; height: 26px; padding: 0; border-color: #ffffff30; color: var(--muted); line-height: 1; }
 #players .follow::before { content: "\25CE"; font-size: 15px; } /* ◎ */
 #players .follow:hover { color: var(--text); border-color: var(--muted); }
 #players .follow[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
-#players li.following { background: #f2b13414; }
-#followChip { position: fixed; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 14px; background: var(--panel); border: 1px solid var(--accent); border-radius: 999px; white-space: nowrap; z-index: 5; }
+#players li.following { background: #f2b13414; margin: 0 -8px; padding: 6px 8px; border-radius: 6px; border-bottom-color: transparent; } /* tint with room either side, in the panel's side padding */
+#followChip { position: fixed; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 14px; background: var(--panel); border: 1px solid var(--accent); border-radius: 6px; white-space: nowrap; z-index: 5; }
 #followChip[hidden] { display: none; }
-#followChip button { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; line-height: 1; }
+#followChip button { width: 26px; height: 26px; padding: 0; border: 0; line-height: 1; }
 #players li.dead { opacity: 0.7; } /* as on the map */
 #players li > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #players small { white-space: nowrap; }
