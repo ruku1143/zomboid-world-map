@@ -19,6 +19,7 @@ const DEAD_COLOR = "#7b8088";
 let colors = new Map();
 let safehouses = [];
 let showSafehouses = true;
+let showPlayers = true;
 let showTowns = true;
 let showPois = true;
 let poiAllowed = true; // the owner's SHOW_POIS mod flag; anything but an explicit false
@@ -279,6 +280,7 @@ const PING_MS = 2000;
 let ping = -1;
 
 function drawPlayers() {
+  if (!showPlayers) return;
   ctx.font = "14px system-ui, sans-serif"; // same as the player list
   ctx.textBaseline = "middle";
   for (const p of dead) {
@@ -358,7 +360,7 @@ function drawPlayers() {
 const GLIDE_MS = 300; // time constant of the glide
 const SNAP_TILES = 500; // farther than this is a teleport/respawn: jump instead of gliding
 const PING_FRAME_MS = 50;
-const playerInView = () => players.some((p) => {
+const playerInView = () => showPlayers && players.some((p) => {
   const d = gameToDzi(p.dx, p.dy, meta.map);
   return !offScreen(toScreen(d.x, d.y));
 });
@@ -377,10 +379,43 @@ function glidePlayers(dt) {
   }
 }
 
+// ---- follow ---------------------------------------------------------------
+// The camera goal tracks one player's displayed (gliding) position, so the normal camera easing
+// smooths it. Dragging the map, or picking anything else in the panel, stops it.
+let following = null; // player name
+let followFloor = 0;  // the floor they were last seen on, so only *their* floor changes move the view
+function stopFollow() {
+  if (following === null) return;
+  following = null;
+  $("followChip").hidden = true;
+  if (lastPlayers) renderPlayers(lastPlayers);
+}
+function startFollow(p) {
+  const z = clampFloor(p.z);
+  centerOnGame(p.x, p.y, FOCUS_ZOOM); // also stops any earlier follow
+  setFloor(z);
+  following = p.name;
+  followFloor = z;
+  $("followName").textContent = p.name;
+  $("followChip").hidden = false;
+  if (lastPlayers) renderPlayers(lastPlayers);
+}
+function followStep() {
+  if (following === null || !meta) return;
+  const p = players.find((q) => q.name === following);
+  if (!p) return stopFollow(); // went offline or died
+  const d = gameToDzi(p.dx, p.dy, meta.map);
+  goal.x = d.x; goal.y = d.y;
+  const z = clampFloor(p.z);
+  if (z !== followFloor) { followFloor = z; setFloor(z); } // changing floor by hand doesn't stop following
+}
+$("followStop").addEventListener("click", stopFollow);
+
 function loop(now) {
   const dt = lastFrame ? Math.min(now - lastFrame, 100) : 0;
   lastFrame = now;
   glidePlayers(dt);
+  followStep();
   if (!reduceMotion && meta) {
     ping = (now % PING_MS) / PING_MS;
     // The ring only needs ~20 fps, and only while a living player is actually in view: a full redraw
@@ -424,6 +459,7 @@ canvas.addEventListener("pointerdown", (e) => {
   canvas.classList.add("drag");
   pinchDist = 0;
   samples = [];
+  stopFollow();
   goal.x = cam.x; goal.y = cam.y; // grabbing the map stops any glide
 });
 canvas.addEventListener("pointermove", (e) => {
@@ -518,6 +554,7 @@ $("floorLabel").addEventListener("click", () => setFloor(0));
 // Glide to a spot; with `zoom`, also ease the zoom in to it (never zooms out past what it asks for).
 const phone = matchMedia("(max-width: 600px)");
 function centerOnGame(gx, gy, zoom) {
+  stopFollow();
   if (phone.matches) setPanel(false); // the bottom sheet would cover the spot we are flying to
   const d = gameToDzi(gx, gy, meta.map);
   goal.x = d.x; goal.y = d.y; // glides there
@@ -551,7 +588,7 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const formatGameTime = (t) => `${MONTHS[t.mo - 1]} ${t.d}, ${t.y} · ${String(t.h).padStart(2, "0")}:${String(t.mi).padStart(2, "0")}`;
 
 // One row of the side panel: swatch and name on the left, details on the right.
-function listItem(color, label, detail, onClick) {
+function listItem(color, label, detail, onClick, extra) {
   const li = document.createElement("li");
   const name = document.createElement("span");
   const swatch = document.createElement("i");
@@ -561,6 +598,7 @@ function listItem(color, label, detail, onClick) {
   const sub = document.createElement("small");
   sub.textContent = detail;
   li.append(name, sub);
+  if (extra) li.append(extra);
   li.addEventListener("click", onClick);
   return li;
 }
@@ -607,8 +645,19 @@ function renderPlayers(data) {
   list.replaceChildren(...players.map((p) => {
     const z = clampFloor(p.z);
     const detail = `${p.hp == null ? "" : `${p.hp}% HP · `}${z ? `${floorLabel(z)} · ` : ""}${p.x}, ${p.y} · ${ago(data.updatedAt)}`;
-    return listItem(colors.get(p.name), playerLabel(p), detail, () => { centerOnGame(p.x, p.y, FOCUS_ZOOM); setFloor(z); });
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "follow";
+    const on = following === p.name;
+    btn.setAttribute("aria-pressed", String(on));
+    btn.setAttribute("aria-label", `${on ? "Stop following" : "Follow"} ${p.name}`);
+    btn.title = on ? "Stop following" : "Follow this player";
+    btn.addEventListener("click", (e) => { e.stopPropagation(); on ? stopFollow() : startFollow(p); });
+    const li = listItem(colors.get(p.name), playerLabel(p), detail, () => { centerOnGame(p.x, p.y, FOCUS_ZOOM); setFloor(z); }, btn);
+    li.classList.toggle("following", on);
+    return li;
   }), ...deadRows);
+  if (following !== null && !players.some((p) => p.name === following)) stopFollow();
   renderSafehouses(data.safehouses || []);
   poiAllowed = data.pois !== false;
   $("poiHead").hidden = $("poiCats").hidden = !poiAllowed;
@@ -657,6 +706,7 @@ function persistedToggle(id, key, set) {
     redraw();
   });
 }
+persistedToggle("plShow", "zmap-players", (on) => (showPlayers = on));
 persistedToggle("shShow", "zmap-safehouses", (on) => (showSafehouses = on));
 persistedToggle("townsShow", "zmap-towns", (on) => (showTowns = on));
 persistedToggle("poiShow", "zmap-pois", (on) => (showPois = on));
