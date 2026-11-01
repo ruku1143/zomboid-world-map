@@ -78,13 +78,13 @@ local function readNonPvpZones()
 end
 
 -- Whether the world's water and power are still on: "true" / "false", or "null" when it cannot be told.
--- UNVERIFIED in a running Build 42 server (the owner should confirm in-game), so each utility tries
--- several routes inside pcall and the first that gives an answer wins:
+-- Confirmed working in-game on the owner's Build 42 server. Each utility tries several routes inside
+-- pcall and the first that gives an answer wins:
 --   power: getWorld():isHydroPowerOn() if it exists (the game's own flag), else the sandbox shut-off below;
 --   water: the sandbox shut-off below (WaterShutModifier).
 -- Sandbox shut-off: the modifier is the in-game day on which the utility goes off, so it is on while
 -- getGameTime():getNightsSurvived() is below it; a negative modifier is taken to mean "never shuts off"
--- (a guess; if a server with "instant" shows the wrong state, that is the line to fix).
+-- (a guess that has not been exercised; if a server with "instant" shows the wrong state, that is the line to fix).
 local function sandboxNumber(name)
     local v = SandboxVars and SandboxVars[name]
     if type(v) == "number" then return v end
