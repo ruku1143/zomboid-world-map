@@ -58,6 +58,9 @@ export function parseView(search, m) {
   return { x, y, zoom: Number.isFinite(zoom) ? Math.min(m.maxLevel, Math.max(MIN_ZOOM, zoom)) : 14 };
 }
 
+// Health bar fill, shared by the map dot and the player list: 0% red through to 100% green.
+export const hpColor = (hp) => `hsl(${Math.round(hp * 1.2)}, 75%, 50%)`;
+
 // Marker colours, picked to stand out on the olive map and from each other.
 export const PLAYER_COLORS = ["#f2b134", "#ff4d4d", "#36d1ff", "#b388ff", "#ff7eb6", "#ffffff", "#4d7cff", "#ff7a1a", "#e6ff4d", "#2ee6c5"];
 

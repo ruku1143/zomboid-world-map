@@ -12,7 +12,7 @@ import {
 import { prefetch, parseFloors } from "../prefetch.js";
 import { TOWNS } from "../public/towns.js";
 import { POIS } from "../public/pois.js";
-import { gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, stepCamera, PAN_MS, clampFloor, floorLabel, parseFloor, assignColors, colorForName, safehouseCorners, PLAYER_COLORS, MIN_ZOOM, POI_CATEGORIES } from "../public/projection.js";
+import { hpColor, gameToDzi, dziToGame, levelForScale, tileSpan, scaleForZoom, zoomForScale, parseView, exactTileRect, parentCrop, stepCamera, PAN_MS, clampFloor, floorLabel, parseFloor, assignColors, colorForName, safehouseCorners, PLAYER_COLORS, MIN_ZOOM, POI_CATEGORIES } from "../public/projection.js";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "zmap-"));
 
@@ -634,4 +634,10 @@ test("dead markers: names the mod lists as cleared (alive but hidden) drop the s
   assert.deepEqual(readPlayers(cfg).dead.map((d) => d.name), ["Bob"], "Admin's marker is dropped, Bob's stays");
   assert.deepEqual(cleanNames("x"), []);
   assert.deepEqual(cleanNames(["a", 5, null, "b"]), ["a", "b"]);
+});
+
+test("hpColor runs from red at 0 to green at 100", () => {
+  assert.equal(hpColor(0), "hsl(0, 75%, 50%)");
+  assert.equal(hpColor(50), "hsl(60, 75%, 50%)");
+  assert.equal(hpColor(100), "hsl(120, 75%, 50%)");
 });
