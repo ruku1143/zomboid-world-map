@@ -733,9 +733,9 @@ async function init() {
 function setPanel(open) {
   $("panel").classList.toggle("hidden", !open);
   $("toggle").setAttribute("aria-expanded", String(open));
+  $("toggle").setAttribute("aria-label", open ? "Hide players panel" : "Show players panel");
 }
 $("toggle").addEventListener("click", () => setPanel($("panel").classList.contains("hidden")));
-$("sheetClose").addEventListener("click", () => setPanel(false));
 // The top bar wraps on narrow screens, so things pinned under it follow its real height.
 if (window.ResizeObserver) {
   new ResizeObserver(() => document.documentElement.style.setProperty("--bar-h", `${$("bar").offsetHeight}px`)).observe($("bar"));

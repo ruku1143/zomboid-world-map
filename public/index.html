@@ -15,10 +15,10 @@
   <span id="state" class="pill" role="status"></span>
   <span id="status" role="status"></span>
   <span id="clock" title="In-game date and time"></span>
-  <button id="toggle" type="button" aria-expanded="true">Players</button>
 </header>
 <aside id="panel">
-  <button id="sheetClose" type="button" aria-label="Hide panel">Hide ▾</button>
+  <button id="toggle" type="button" aria-expanded="true" aria-controls="panelBody" aria-label="Hide players panel" title="Show or hide the players panel"></button>
+  <div id="panelBody">
   <ul id="players"></ul>
   <p id="empty">Nobody is online.</p>
   <div id="shHead"><strong>Safehouses</strong><label><input type="checkbox" id="shShow" checked> Show on map</label></div>
@@ -27,6 +27,7 @@
   <div id="poiCats"></div>
   <p id="poiHint" hidden>No categories selected, so no points of interest are shown.</p>
   <div id="mapOpts"><strong>Map</strong><label><input type="checkbox" id="townsShow" checked> Town names</label></div>
+  </div>
 </aside>
 <div id="banner" hidden><span id="bannerText"></span><button id="bannerClose" type="button" aria-label="Dismiss">×</button></div>
 <div id="floors" role="group" aria-label="Floor">
