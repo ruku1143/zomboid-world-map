@@ -20,6 +20,7 @@
 <aside id="panel">
   <button id="toggle" type="button" aria-expanded="true" aria-controls="panelBody" aria-label="Hide players panel" title="Show or hide the players panel"></button>
   <div id="panelBody">
+  <div id="plHead"><strong>Players</strong><label><input type="checkbox" id="plShow" checked> Show on map</label></div>
   <ul id="players"></ul>
   <p id="empty">Nobody is online.</p>
   <div id="shHead"><strong>Safehouses</strong><label><input type="checkbox" id="shShow" checked> Show on map</label></div>
@@ -38,6 +39,7 @@
   <button id="floorLabel" type="button" title="Current floor (G = ground, F1 = first floor, B1 = basement). Click to return to the ground floor.">G</button>
   <button id="floorDown" type="button" aria-label="Floor down" title="Floor down">▼</button>
 </div>
+<div id="followChip" hidden><span>Following <strong id="followName"></strong></span><button id="followStop" type="button" aria-label="Stop following">✕</button></div>
 <div id="coords">—</div>
 <div id="version" title="Map version: package version and git commit running on the server"></div>
 <script type="module" src="map.js"></script>
